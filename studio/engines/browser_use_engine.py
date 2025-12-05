@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import re
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from browser_use import Agent, Browser
@@ -7,11 +11,23 @@ from browser_use.llm import ChatGroq
 
 from .base_engine import AutomationEngine
 
+LOG_FILE = Path("Registro_de_logs.txt")
+
+
+def log_line(message: str) -> None:
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[Engine:BrowserUse][{ts}] {message}"
+    try:
+        with LOG_FILE.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
 
 class BrowserUseEngine(AutomationEngine):
     """
-    Implementacion de AutomationEngine usando browser-use (motor actual).
-    Nota: Esta clase no esta cableada en la UI aun; sirve como primer ladrillo para multi-motor.
+    Implementacion de AutomationEngine usando browser-use.
+    Incluye manejo de fallback cuando el proveedor devuelve errores de JSON/schema.
     """
 
     def __init__(
@@ -39,33 +55,93 @@ class BrowserUseEngine(AutomationEngine):
             await self.browser.stop()
             self.browser = None
 
-    async def execute_task(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        if not self.browser:
-            await self.start()
-
-        llm = ChatGroq(model=self.model, temperature=0.0)
+    async def _run_agent(
+        self,
+        task: str,
+        browser: Browser,
+        model: str,
+        flash_mode: bool = True,
+        initial_actions: Optional[list] = None,
+    ):
+        llm = ChatGroq(model=model, temperature=0.0)
         agent = Agent(
             task=task,
             llm=llm,
-            browser=self.browser,
+            browser=browser,
             use_vision=self.use_vision,
             include_attributes=[],
             max_history_items=6,
-            flash_mode=True,
+            initial_actions=initial_actions or [],
+            max_steps=2,
+            max_failures=2,
+            max_actions_per_step=1,
+            step_timeout=45,
+            llm_timeout=25,
+            flash_mode=flash_mode,
+            override_system_message="Eres un navegador. Cumple la tarea.",
         )
         history = await agent.run()
-        success = bool(history.is_successful())
-        result_text = ""
-        try:
-            result_text = history.last_result[-1].extracted_content  # type: ignore
-        except Exception:
-            result_text = ""
+        return history
 
-        return {
-            "success": success,
-            "result": result_text,
-            "errors": [] if success else ["execution failed"],
-        }
+    async def execute_task(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.browser:
+            await self.start()
+        assert self.browser is not None
+
+        log_line(f"Inicio tarea: {task}")
+        try:
+            history = await self._run_agent(
+                task=task,
+                browser=self.browser,
+                model=self.model,
+                flash_mode=True,
+                initial_actions=context.get("initial_actions") if context else None,
+            )
+            success = bool(history.is_successful())
+            if success:
+                log_line("Exito tarea (primario)")
+                try:
+                    result_text = history.last_result[-1].extracted_content  # type: ignore
+                except Exception:
+                    result_text = ""
+                return {"success": True, "result": result_text, "errors": []}
+            raise RuntimeError(f"Agente termino con success={history.is_successful()}")
+        except Exception as exc:
+            msg = str(exc)
+            schema_err = re.search(r"(response_format|json_schema|Invalid JSON|structured)", msg, re.IGNORECASE)
+            if schema_err or "timed out" in msg.lower():
+                log_line(f"Fallback degradado por error: {exc}")
+                browser_fb = Browser(
+                    headless=True,
+                    keep_alive=False,
+                    accept_downloads=False,
+                    wait_for_network_idle_page_load_time=0.5,
+                    minimum_wait_page_load_time=0.25,
+                )
+                task_fb = (
+                    f"{task}\n"
+                    "Devuelve solo el primer dato visible en texto plano. "
+                    "No uses JSON. Responde breve."
+                )
+                history_fb = await self._run_agent(
+                    task=task_fb,
+                    browser=browser_fb,
+                    model="llama-3.1-8b-instant",
+                    flash_mode=True,
+                    initial_actions=context.get("initial_actions") if context else None,
+                )
+                success_fb = bool(history_fb.is_successful())
+                try:
+                    result_fb = history_fb.last_result[-1].extracted_content  # type: ignore
+                except Exception:
+                    result_fb = ""
+                if success_fb:
+                    log_line("Exito degradado")
+                    return {"success": True, "result": result_fb, "errors": ["degradado"]}
+                log_line("Fallback tambien fallo")
+                return {"success": False, "result": result_fb, "errors": ["fallback failed"]}
+            log_line(f"Error no manejado: {exc}")
+            return {"success": False, "result": "", "errors": [msg]}
 
     async def get_screenshot(self) -> bytes | None:
         # browser-use guarda capturas en history; aqui devolvemos None para simplificar
