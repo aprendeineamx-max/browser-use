@@ -168,6 +168,27 @@ if data_cfg["source"] != "none":
     if data_cfg["source"] == "json":
         data_cfg["json_field"] = st.text_input("Campo/llave a usar", value=data_cfg["json_field"])
     data_cfg["var_name"] = st.text_input("Nombre de variable en prompt", value=data_cfg["var_name"] or "item")
+
+    # Indicador visual de datos cargados
+    rows_detected = None
+    if data_cfg["path"]:
+        try:
+            path_obj = Path(data_cfg["path"])
+            if path_obj.exists():
+                if data_cfg["source"] == "csv":
+                    import pandas as pd
+                    rows_detected = len(pd.read_csv(path_obj))
+                elif data_cfg["source"] == "excel":
+                    import pandas as pd
+                    rows_detected = len(pd.read_excel(path_obj))
+                elif data_cfg["source"] == "json":
+                    import json
+                    with path_obj.open("r", encoding="utf-8") as f:
+                        rows_detected = len(json.load(f))
+        except Exception:
+            rows_detected = None
+    if rows_detected is not None:
+        st.info(f"Modo de Datos Activo: {rows_detected} filas detectadas", icon="ℹ️")
 st.session_state.data_cfg = data_cfg
 
 # -------------------------
