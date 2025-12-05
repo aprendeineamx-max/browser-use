@@ -88,6 +88,42 @@ class BrowserUseEngine(AutomationEngine):
         history = await agent.run()
         return history
 
+    async def _fallback_plain(
+        self,
+        task: str,
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Modo degradado: headless, sin vision, prompt minimo y modelo chico."""
+        browser_fb = Browser(
+            headless=True,
+            keep_alive=False,
+            accept_downloads=False,
+            wait_for_network_idle_page_load_time=0.5,
+            minimum_wait_page_load_time=0.25,
+        )
+        task_fb = (
+            f"{task}\n"
+            "Devuelve solo el primer dato visible en texto plano. "
+            "No uses JSON. Responde breve."
+        )
+        history_fb = await self._run_agent(
+            task=task_fb,
+            browser=browser_fb,
+            model="llama-3.1-8b-instant",
+            flash_mode=True,
+            initial_actions=context.get("initial_actions") if context else None,
+        )
+        success_fb = bool(history_fb.is_successful())
+        try:
+            result_fb = history_fb.last_result[-1].extracted_content  # type: ignore
+        except Exception:
+            result_fb = ""
+        if success_fb:
+            log_line("[Fallback] Exito degradado")
+            return {"success": True, "result": result_fb, "errors": ["degradado"]}
+        log_line("[Fallback] tambien fallo")
+        return {"success": False, "result": result_fb, "errors": ["fallback failed"]}
+
     async def execute_task(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         if not self.browser:
             await self.start()
@@ -113,41 +149,15 @@ class BrowserUseEngine(AutomationEngine):
                 except Exception:
                     result_text = ""
                 return {"success": True, "result": result_text, "errors": []}
-            raise RuntimeError(f"Agente termino con success={history.is_successful()}")
+            # Si no hubo exito, forzamos fallback aunque no haya exception Python
+            log_line(f"[Fallback] Forzado por success={history.is_successful()}")
+            return await self._fallback_plain(task, context)
         except Exception as exc:
             msg = str(exc)
             schema_err = re.search(r"(response_format|json_schema|Invalid JSON|structured)", msg, re.IGNORECASE)
             if schema_err or "timed out" in msg.lower():
                 log_line(f"[Fallback] degradado por error: {exc}")
-                browser_fb = Browser(
-                    headless=True,
-                    keep_alive=False,
-                    accept_downloads=False,
-                    wait_for_network_idle_page_load_time=0.5,
-                    minimum_wait_page_load_time=0.25,
-                )
-                task_fb = (
-                    f"{task}\n"
-                    "Devuelve solo el primer dato visible en texto plano. "
-                    "No uses JSON. Responde breve."
-                )
-                history_fb = await self._run_agent(
-                    task=task_fb,
-                    browser=browser_fb,
-                    model="llama-3.1-8b-instant",
-                    flash_mode=True,
-                    initial_actions=context.get("initial_actions") if context else None,
-                )
-                success_fb = bool(history_fb.is_successful())
-                try:
-                    result_fb = history_fb.last_result[-1].extracted_content  # type: ignore
-                except Exception:
-                    result_fb = ""
-                if success_fb:
-                    log_line("[Fallback] Exito degradado")
-                    return {"success": True, "result": result_fb, "errors": ["degradado"]}
-                log_line("[Fallback] tambien fallo")
-                return {"success": False, "result": result_fb, "errors": ["fallback failed"]}
+                return await self._fallback_plain(task, context)
             log_line(f"[Error] no manejado: {exc}")
             return {"success": False, "result": "", "errors": [msg]}
 
