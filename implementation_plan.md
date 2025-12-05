@@ -10,3 +10,8 @@
 - UX hibrida: modo basico/avanzado, configuraciones de headers/proxy/anti-detect/trace.
 - Integrar LAM emergentes (Skyvern, Stagehand, LaVague) como herramientas (investigacion).
 - Investigar y probar modelos con soporte para `response_format` o desactivar schema para evitar 400 en OpenRouter/Groq.
+
+## PROTOCOLOS DE RESPUESTA OBLIGATORIOS
+- Evidencia de logs: Toda respuesta tecnica debe cerrar adjuntando las ultimas 5-10 lineas de `Registro_de_logs.txt`.
+- Gestion de versiones: Si hubo cambios de codigo, siempre facilitar bloque listo para copiar/pegar con `git add .`, `git commit -m "... (en español)"`, `git push`.
+- Idioma commits: Mensajes descriptivos en español.
