@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from .base_engine import AutomationEngine
+from studio.utils.sentinel import ensure_config, check_vital_signs
 
 LOG_FILE = Path("Registro_de_logs.txt")
 
@@ -39,6 +40,9 @@ class LaVagueEngine(AutomationEngine):
     async def execute_task(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         await self.start()
         log_line(f"[Task] {task}")
+        cfg = ensure_config()
+        mode = cfg.get("lavague_mode", "api")
+        health = check_vital_signs(cfg.get("profile", "estandar"))
         try:
             # Import lazily to avoid failures if missing deps
             try:
@@ -48,6 +52,7 @@ class LaVagueEngine(AutomationEngine):
                 log_line(f"[Error] LaVague no importable: {exc}")
                 return {"success": False, "result": "", "errors": [f"No importable: {exc}"]}
 
+            log_line(f"[Mode] LaVague usando {'API Cloud' if mode=='api' else 'Modelo Local'}")
             model = WorldModel()
             engine = ActionEngine(world_model=model)
             result = engine.act(task)

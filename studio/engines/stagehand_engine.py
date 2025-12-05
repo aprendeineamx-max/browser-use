@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from .base_engine import AutomationEngine
+from studio.utils.sentinel import ensure_config, check_vital_signs
 
 LOG_FILE = Path("Registro_de_logs.txt")
 RUNNER_PATH = Path("studio/bridge_stagehand/runner.js")
@@ -46,6 +47,8 @@ class StagehandEngine(AutomationEngine):
     async def execute_task(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         await self.start()
         log_line(f"Tarea recibida: {task}")
+        cfg = ensure_config()
+        check_vital_signs(cfg.get("profile", "estandar"))
         try:
             cmd = NODE_CMD + [task]
             completed = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")

@@ -1,0 +1,57 @@
+from __future__ import annotations
+
+import gc
+import json
+import time
+from pathlib import Path
+from typing import Dict
+
+import psutil
+
+CONFIG_PATH = Path("studio/config.json")
+LOG_FILE = Path("Registro_de_logs.txt")
+
+
+def log_line(message: str) -> None:
+    try:
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        with LOG_FILE.open("a", encoding="utf-8") as f:
+            f.write(f"[Sentinel][{ts}] {message}\n")
+    except Exception:
+        pass
+
+
+def ensure_config() -> Dict[str, str]:
+    default_cfg = {"profile": "estandar", "lavague_mode": "api"}
+    if not CONFIG_PATH.exists():
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(json.dumps(default_cfg, indent=2), encoding="utf-8")
+        return default_cfg
+    try:
+        data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        return {**default_cfg, **data}
+    except Exception:
+        return default_cfg
+
+
+def check_vital_signs(profile: str) -> Dict[str, str]:
+    """Monitorea RAM/CPU y aplica protocolos segun el perfil."""
+    mem = psutil.virtual_memory().percent
+    cpu = psutil.cpu_percent(interval=0.2)
+    log_line(f"Vitals -> RAM: {mem:.1f}% CPU: {cpu:.1f}% Perfil: {profile}")
+
+    if profile.lower() == "ligero":
+        if mem > 70:
+            log_line(f"RAM al {mem:.1f}%. Modo Ligero: pausa 5s y preferir APIs externas.")
+            time.sleep(5)
+            return {"prefer_external_api": "true"}
+    elif profile.lower() == "estandar":
+        if mem > 90:
+            log_line(f"RAM al {mem:.1f}%. Modo Estandar: pausa 10s y GC.")
+            time.sleep(10)
+            gc.collect()
+            return {"prefer_external_api": "true"}
+    else:  # sin limite
+        log_line("Modo Sin Limite: sin mitigacion, solo monitoreo.")
+
+    return {"prefer_external_api": "false"}

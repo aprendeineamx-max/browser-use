@@ -10,6 +10,7 @@ from browser_use import Agent, Browser
 from browser_use.llm import ChatGroq
 
 from .base_engine import AutomationEngine
+from studio.utils.sentinel import ensure_config, check_vital_signs
 
 LOG_FILE = Path("Registro_de_logs.txt")
 
@@ -91,6 +92,9 @@ class BrowserUseEngine(AutomationEngine):
         if not self.browser:
             await self.start()
         assert self.browser is not None
+
+        cfg = ensure_config()
+        health = check_vital_signs(cfg.get("profile", "estandar"))
 
         log_line(f"[Start] Tarea: {task}")
         try:
