@@ -163,6 +163,16 @@ structured = history.structured_output  # instancia Resultado validada
 - **Modo rapido**: `flash_mode=True` elimina thinking y acelera iteraciones.
 - **Timeouts**: `step_timeout` y `llm_timeout` para detener colgadas.
 
+### Mitigar TPM 413 y timeouts (Groq y sitios pesados)
+- `use_vision=False` + `vision_detail_level="low"`: desactiva o aligera capturas; menos tokens → menos 413.
+- `minimum_wait_page_load_time`: subelo si necesitas que la pagina estabilice antes de capturar estado; reduce capturas incompletas.
+- `wait_for_network_idle_page_load_time`: da margen extra para paginas pesadas (YouTube, etc.) y evita falsos timeouts.
+- `max_steps`: menos iteraciones → menos contexto acumulado → menos tokens.
+- Modelo mas pequeno en Groq: menos restricciones de TPM; considera opciones de menor tamano si no requieres el mas grande.
+- `include_attributes=[]`: recorta atributos del DOM en la extraccion; reduce tokens.
+- `max_history_items=6`: mantiene solo las ultimas 6 entradas sin violar el minimo (>5) que exige Browser-Use; recorta contexto.
+- `keep_alive=False`: al terminar, cierra el navegador; evita warnings de foco/pestañas al apagar. Puedes bajar logging a warning si no quieres ver esos avisos.
+
 ## 10. Observabilidad y debugging
 - Usa `AgentHistoryList`:
   - `history.urls()`, `screenshot_paths()`, `action_names()`, `errors()`, `model_thoughts()`.
