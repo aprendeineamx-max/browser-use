@@ -319,6 +319,8 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+# Ejecucion recomendada via BrowserUseEngine para mayor resiliencia.
 """
     return script
 
