@@ -1,0 +1,208 @@
+---
+title: "Guia completa Browser-Use"
+description: "Manual academico de cero a experto para automatizar navegadores con Browser-Use."
+icon: "graduation-cap"
+mode: "wide"
+---
+
+## Que es Browser-Use y para quien es esta guia
+- Libreria Python asincrona para controlar navegadores via CDP y LLMs.
+- Pensado para agentes de navegacion autonomos, scraping robusto, QA funcional y tareas RPA.
+- La guia avanza desde instalacion hasta configuracion fina, produccion y observabilidad.
+
+<Note icon="info-circle" iconType="regular">
+Usa siempre <code>ChatBrowserUse</code> como modelo por defecto: es el mas rapido, preciso y de menor costo para automatizar con Browser-Use.
+</Note>
+
+## 0. Preparacion del entorno (uv, llaves, .env)
+```bash entorno
+pip install uv
+uv venv --python 3.12
+source .venv/bin/activate  # En Windows: .venv\Scripts\activate
+uv sync                    # Instala dependencias del proyecto
+```
+- Crea un archivo `.env` y define al menos `BROWSER_USE_API_KEY`. Opcionales: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`.
+- No reemplaces nombres de modelos: usa exactamente los nombres soportados.
+
+## 1. Primer agente en 5 minutos
+```python inicio
+import asyncio
+from dotenv import load_dotenv
+from browser_use import Agent, ChatBrowserUse
+
+load_dotenv()
+
+async def main():
+    agent = Agent(task="Encuentra el primer post en Show HN", llm=ChatBrowserUse())
+    await agent.run()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+- Ejecuta con `uv run python main.py`.
+- Ajusta `max_steps` si quieres limitar acciones.
+
+## 2. Arquitectura esencial
+- **Agent**: orquesta pasos, prompt y memoria. Expone `run()` y devuelve `AgentHistoryList`.
+- **Browser**: controla Chrome/Chromium local o remoto; admite nube, proxies, grabacion.
+- **LLM**: modelo de razonamiento. Default recomendado: `ChatBrowserUse`.
+- **Tools/Actions**: registro de funciones que el agente puede llamar (click, scroll, extract, herramientas personalizadas).
+
+## 3. Configuracion del Agent (principales switches)
+```python agent_config
+from browser_use import Agent, Browser, ChatBrowserUse
+
+browser = Browser(headless=False, window_size={"width": 1400, "height": 900})
+
+agent = Agent(
+    task="Resume la pagina y guarda resultados",
+    llm=ChatBrowserUse(),
+    browser=browser,
+    use_vision="auto",              # auto incluye captura cuando hace falta
+    max_steps=80,                   # limite de pasos
+    max_actions_per_step=4,         # lote de acciones por iteracion
+    max_failures=3,                 # reintentos por error
+    flash_mode=False,               # True: mas rapido, menos deliberacion
+    use_thinking=True,              # conserva campo thinking
+    save_conversation_path="runs/hn.json",  # historial completo
+    output_model_schema=None        # ver seccion de salida tipada
+)
+```
+Checklist de parametros clave:
+- `initial_actions`: acciones deterministas antes del modelo.
+- `tools`: registro de herramientas disponibles (alias: `controller`).
+- `page_extraction_llm`: usa un modelo mas pequeno y rapido para solo extraer HTML.
+- `vision_detail_level`: `"low"`, `"high"` o `"auto"` para capturas.
+- `generate_gif`: `True` o ruta para GIF de la sesion.
+- `max_history_items`: recorta contexto para reducir costo.
+- `step_timeout` y `llm_timeout`: control fino de tiempos.
+
+## 4. Configuracion del Browser (local, remoto, nube)
+```python browser_config
+from browser_use import Browser
+from browser_use.browser import ProxySettings
+
+browser = Browser(
+    headless=None,                      # autodetecta segun display
+    window_size={"width": 1280, "height": 720},
+    viewport={"width": 1280, "height": 720},
+    keep_alive=False,
+    allowed_domains=["*.example.com"],  # restringe navegacion
+    prohibited_domains=["*.gambling-site.net"],
+    permissions=["clipboardReadWrite", "notifications"],
+    proxy=ProxySettings(server="http://proxy:8080"),
+    record_video_dir="videos",          # mp4 de la sesion
+    record_har_path="traces/run.har",
+)
+```
+- **Aceleracion con nube**: `Browser(use_cloud=True)` provisiona un navegador en Browser Use Cloud (bypass captcha, latencia baja, perfiles remotos) y solo requiere `BROWSER_USE_API_KEY`.
+- **Perfiles y estado**: `user_data_dir`, `profile_directory`, `storage_state`.
+- **Descargas**: `downloads_path`, `accept_downloads`, `auto_download_pdfs`.
+- **Seguridad**: `chromium_sandbox`, `disable_security` (evitalo salvo casos controlados).
+- **Medicion**: `record_video_dir`, `record_har_mode`, `traces_dir`.
+
+## 5. Modelos LLM y estrategias
+- Usa `ChatBrowserUse()` por defecto para tareas de navegacion.
+- Alternativas: `ChatOpenAI(model="gpt-4.1-mini")`, `ChatAnthropic(model="claude-sonnet-4-0")`, `ChatGoogle(model="gemini-flash-latest")`.
+- Para extraccion rapida, separa `page_extraction_llm` con un modelo ligero.
+- Ajusta `llm_timeout` segun SLA de tu proveedor.
+
+## 6. Tools y acciones personalizadas (tipado con Pydantic v2)
+```python tools_custom
+from pydantic import BaseModel
+from browser_use import Tools, ActionResult, Browser
+
+tools = Tools()
+
+class SearchInput(BaseModel):
+    query: str
+
+@tools.action("Busca en la barra de la pagina")
+async def search_bar(data: SearchInput, browser: Browser) -> ActionResult:
+    await browser.send_keys(data.query)
+    await browser.send_keys("Enter")
+    return ActionResult(content=f"Busqueda enviada: {data.query}")
+```
+- Usa modelos Pydantic v2 para validar I/O de acciones y mantener seguridad tipada.
+- Incluye `browser` como parametro para acciones deterministas (usa Actor API).
+- Registra `tools` en el agente: `Agent(task=..., llm=..., tools=tools)`.
+
+## 7. Salida estructurada con Pydantic
+```python salida
+from pydantic import BaseModel
+from browser_use import Agent, ChatBrowserUse
+
+class Resultado(BaseModel):
+    titulo: str
+    resumen: str
+    enlaces: list[str]
+
+agent = Agent(
+    task="Lee la pagina y devuelve titulo, resumen y 3 enlaces",
+    llm=ChatBrowserUse(),
+    output_model_schema=Resultado,
+)
+history = await agent.run()
+structured = history.structured_output  # instancia Resultado validada
+```
+- El modelo valida la respuesta del LLM y simplifica el post-procesado.
+- Combina con `save_conversation_path` para auditoria.
+
+## 8. Prompting practico
+- Se especifico y numera pasos: navegacion, extraccion, guardado.
+- Nombra acciones cuando las conoces: `click`, `send_keys`, `extract`, `write_file`.
+- Define alternativas ante fallos (captcha, timeouts) y usa `go_back` o `search`.
+- Para formularios rebeldes, prueba navegacion por teclado (`send_keys` con "Tab Tab Enter").
+- Evita prompts abiertos como "haz dinero en la web".
+
+## 9. Rendimiento y resiliencia
+- **Nube**: `Browser(use_cloud=True)` mejora latencia, evita bloqueos y maneja autenticacion remota.
+- **Lotes de acciones**: sube `max_actions_per_step` para formularios largos.
+- **Costos**: ajusta `max_history_items` y `vision_detail_level="low"` para menos tokens.
+- **Tolerancia a fallos**: `max_failures`, `final_response_after_failure=True`.
+- **Modo rapido**: `flash_mode=True` elimina thinking y acelera iteraciones.
+- **Timeouts**: `step_timeout` y `llm_timeout` para detener colgadas.
+
+## 10. Observabilidad y debugging
+- Usa `AgentHistoryList`:
+  - `history.urls()`, `screenshot_paths()`, `action_names()`, `errors()`, `model_thoughts()`.
+  - `history.action_history()` para un resumen compacto.
+- Graba evidencia con `record_video_dir` y `record_har_path`.
+- Incluye `generate_gif=True` para demos rapidas.
+- Activa `highlight_elements` para visualizar objetivos en capturas.
+
+## 11. Produccion y seguridad
+```python produccion
+from browser_use import Browser, sandbox, ChatBrowserUse
+from browser_use.agent.service import Agent
+
+@sandbox(cloud_profile_id="tu-perfil-id", cloud_proxy_country_code="us")
+async def tarea(browser: Browser):
+    agent = Agent(task="Proceso autenticado", browser=browser, llm=ChatBrowserUse())
+    await agent.run()
+```
+- `@sandbox` despliega en la nube con persistencia, proxies y cookies sincronizadas.
+- Sincroniza cookies locales: `BROWSER_USE_API_KEY=... curl -fsSL https://browser-use.com/profile.sh | sh`.
+- Restringe dominios con `allowed_domains` y protege informacion con `sensitive_data`.
+- Define `available_file_paths` si el agente debe leer/escribir archivos concretos.
+
+## 12. Buenas practicas de desarrollo
+- Instala y ejecuta pre-commit antes de PR: `uv run pre-commit run --all-files`.
+- Mantiene tipado fuerte en acciones y salidas usando Pydantic v2.
+- Separa configuracion en modulos para reutilizar `Browser` y `Agent`.
+- Usa `uv sync` para dependencias reproducibles; evita `pip install` directo.
+- Prueba flujos criticos con `uv run pytest tests/tu_modulo::test_caso`.
+- Documenta tareas y modelos en docstrings descriptivos.
+
+## 13. Checklist rapido de experto
+- Entorno reproducible con uv y .env versionado de forma segura.
+- Agent configurado con `max_steps`, `max_actions_per_step`, `max_failures`.
+- Browser optimizado: nube (`use_cloud=True`) o perfil local con `user_data_dir`.
+- Tools tipados con Pydantic y registros claros de acciones.
+- Salida estructurada con `output_model_schema` y auditoria via `save_conversation_path`.
+- Observabilidad: videos/HAR y `AgentHistoryList` para diagnostico.
+- Despliegue: `@sandbox` + perfiles/proxies; pre-commit y pruebas automaticas.
+
+<Callout icon="flag-checkered" iconType="regular">
+Sigue este flujo: instala con uv, crea tu primer Agent con ChatBrowserUse, configura Browser (idealmente con <code>use_cloud=True</code> para produccion), tipa tus Tools con Pydantic v2, valida la salida con modelos y monitorea cada ejecucion con AgentHistoryList.
+</Callout>
