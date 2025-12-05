@@ -92,7 +92,7 @@ class BrowserUseEngine(AutomationEngine):
             await self.start()
         assert self.browser is not None
 
-        log_line(f"Inicio tarea: {task}")
+        log_line(f"[Start] Tarea: {task}")
         try:
             history = await self._run_agent(
                 task=task,
@@ -103,7 +103,7 @@ class BrowserUseEngine(AutomationEngine):
             )
             success = bool(history.is_successful())
             if success:
-                log_line("Exito tarea (primario)")
+                log_line("[Success] Ejecucion primaria completada")
                 try:
                     result_text = history.last_result[-1].extracted_content  # type: ignore
                 except Exception:
@@ -114,7 +114,7 @@ class BrowserUseEngine(AutomationEngine):
             msg = str(exc)
             schema_err = re.search(r"(response_format|json_schema|Invalid JSON|structured)", msg, re.IGNORECASE)
             if schema_err or "timed out" in msg.lower():
-                log_line(f"Fallback degradado por error: {exc}")
+                log_line(f"[Fallback] degradado por error: {exc}")
                 browser_fb = Browser(
                     headless=True,
                     keep_alive=False,
@@ -140,11 +140,11 @@ class BrowserUseEngine(AutomationEngine):
                 except Exception:
                     result_fb = ""
                 if success_fb:
-                    log_line("Exito degradado")
+                    log_line("[Fallback] Exito degradado")
                     return {"success": True, "result": result_fb, "errors": ["degradado"]}
-                log_line("Fallback tambien fallo")
+                log_line("[Fallback] tambien fallo")
                 return {"success": False, "result": result_fb, "errors": ["fallback failed"]}
-            log_line(f"Error no manejado: {exc}")
+            log_line(f"[Error] no manejado: {exc}")
             return {"success": False, "result": "", "errors": [msg]}
 
     async def get_screenshot(self) -> bytes | None:
