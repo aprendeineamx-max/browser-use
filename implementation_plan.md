@@ -15,3 +15,13 @@
 - Evidencia de logs: Toda respuesta tecnica debe cerrar adjuntando las ultimas 5-10 lineas de `Registro_de_logs.txt`.
 - Gestion de versiones: Si hubo cambios de codigo, siempre facilitar bloque listo para copiar/pegar con `git add .`, `git commit -m "... (en español)"`, `git push`.
 - Idioma commits: Mensajes descriptivos en español.
+
+## Fase 1-4 (Prometheus)
+- [x] Refactor a studio/ (app y pages reubicadas)
+- [x] Builder base + gestor de scripts
+- [x] Variables dinámicas en prompts (CSV/Excel/JSON)
+- [x] Resiliencia/Fallback en BrowserUseEngine y generación de scripts usando motor
+- [x] Multi-motor base (Skyvern mock) y README Prometheus
+
+## Fase 2: Integración LAM (Skyvern/Stagehand)
+- Estado: Pendiente de Docker (revisar `docs/DOCKER_STRATEGY.md`)

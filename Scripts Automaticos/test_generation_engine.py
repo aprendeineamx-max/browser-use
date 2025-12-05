@@ -1,5 +1,13 @@
 import asyncio
+import sys
 from studio.engines.browser_use_engine import BrowserUseEngine
+
+# Forzar UTF-8 para evitar errores en consola Windows
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
 
 async def run_once(task_text: str, engine, initial_actions):
@@ -7,18 +15,13 @@ async def run_once(task_text: str, engine, initial_actions):
 
 
 async def main():
-    engine = BrowserUseEngine(headless=False, use_vision=False)
+    engine = BrowserUseEngine(headless=True, use_vision=False)
 
     items = [None]
-
-    initial_actions = [
-    {'navigate': {'url': 'https://example.com', 'new_tab': false}},
-    {'scroll': {'delta_y': 200, 'delta_x': 0}}
-    ]
+    initial_actions = []  # sin navegación para evitar captchas
 
     for item in items:
-        task_text = '''1. Navega a https://example.com (nueva pesta?a: False).
-2. Haz scroll (delta_y=200, delta_x=0).'''
+        task_text = "Responde solo 'ok'."
         result = await run_once(task_text, engine, initial_actions)
         print("Resultado:", result)
 
