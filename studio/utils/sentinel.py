@@ -8,17 +8,13 @@ from typing import Dict
 
 import psutil
 
+from studio.utils.logger import LOG_FILE, log_event
+
 CONFIG_PATH = Path("studio/config.json")
-LOG_FILE = Path("Registro_de_logs.txt")
 
 
 def log_line(message: str) -> None:
-    try:
-        ts = time.strftime("%Y-%m-%d %H:%M:%S")
-        with LOG_FILE.open("a", encoding="utf-8") as f:
-            f.write(f"[Sentinel][{ts}] {message}\n")
-    except Exception:
-        pass
+    log_event("Sentinel", message)
 
 
 def ensure_config() -> Dict[str, str]:

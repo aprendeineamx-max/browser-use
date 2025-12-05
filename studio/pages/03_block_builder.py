@@ -10,9 +10,11 @@ Nota: Las API keys se gestionan en Key Tester/Settings; el builder solo arma ló
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import streamlit as st
+
+from studio.utils.logger import log_event, log_error, log_success
 
 SCRIPTS_DIR = Path("Scripts Automaticos")
 SCRIPTS_DIR.mkdir(exist_ok=True)
@@ -59,7 +61,7 @@ init_state()
 def add_block(block_type: str):
     defaults = {
         "navigate": {"url": "https://example.com", "new_tab": False},
-        "scroll": {"delta_y": 300, "delta_x": 0},
+        "scroll": {"delta_y": 300, "delta_x": 0, "smart": True},
         "click_css": {"selector": "a[href]", "description": "clic CSS"},
         "click_xpath": {"selector": "//a", "description": "clic XPath"},
         "input_css": {"selector": "input", "text": "texto a escribir"},
@@ -75,7 +77,7 @@ def render_block_text(block: Dict[str, Any], idx: int) -> str:
     if t == "navigate":
         return f"{idx}. Navega a {p['url']} (nueva pestaña: {p['new_tab']})."
     if t == "scroll":
-        return f"{idx}. Haz scroll (delta_y={p['delta_y']}, delta_x={p['delta_x']})."
+        return f"{idx}. Haz scroll (delta_y={p['delta_y']}, delta_x={p['delta_x']}, smart={p.get('smart', False)})."
     if t == "click_css":
         return f"{idx}. Haz click en CSS '{p['selector']}' ({p['description']})."
     if t == "click_xpath":
@@ -123,7 +125,8 @@ for idx, block in enumerate(st.session_state.blocks):
     elif t == "scroll":
         dy = st.number_input(f"delta_y #{idx+1}", value=p["delta_y"], step=50, key=f"scr_dy_{idx}")
         dx = st.number_input(f"delta_x #{idx+1}", value=p["delta_x"], step=50, key=f"scr_dx_{idx}")
-        new_blocks.append({"type": "scroll", "params": {"delta_y": dy, "delta_x": dx}})
+        smart = st.checkbox(f"Scroll inteligente #{idx+1}", value=p.get("smart", True), key=f"scr_sm_{idx}")
+        new_blocks.append({"type": "scroll", "params": {"delta_y": dy, "delta_x": dx, "smart": smart}})
     elif t == "click_css":
         sel = st.text_input(f"Selector CSS #{idx+1}", value=p["selector"], key=f"ccss_{idx}")
         desc = st.text_input(f"Descripcion #{idx+1}", value=p["description"], key=f"ccss_desc_{idx}")
@@ -223,7 +226,23 @@ selected_script = st.selectbox("Script", ["(ninguno)"] + existing)
 loaded_code = ""
 if selected_script != "(ninguno)":
     loaded_code = (SCRIPTS_DIR / selected_script).read_text(encoding="utf-8")
-st.text_area("Contenido (solo texto, no parsea a bloques)", value=loaded_code, height=200, key="loaded_code")
+edited_code = st.text_area("Contenido (solo texto, no parsea a bloques)", value=loaded_code, height=200, key="loaded_code")
+col_edit1, col_edit2 = st.columns(2)
+with col_edit1:
+    if selected_script != "(ninguno)" and st.button("Guardar cambios en script cargado"):
+        (SCRIPTS_DIR / selected_script).write_text(edited_code, encoding="utf-8")
+        log_success("BlockBuilder", f"Script editado guardado: {selected_script}")
+        st.success(f"Guardado {selected_script}")
+with col_edit2:
+    new_copy_name = st.text_input("Guardar copia de este script como (.py)", value="", key="loaded_save_as")
+    if st.button("Guardar copia del script cargado"):
+        if not new_copy_name.endswith(".py"):
+            st.error("El nombre debe terminar en .py")
+        else:
+            target = SCRIPTS_DIR / new_copy_name
+            target.write_text(edited_code, encoding="utf-8")
+            log_success("BlockBuilder", f"Copia creada desde editor: {new_copy_name}")
+            st.success(f"Copia guardada: {new_copy_name}")
 
 # -------------------------
 # Generar script
@@ -245,23 +264,50 @@ def render_data_loader(cfg: Dict[str, Any]) -> str:
     if cfg["source"] == "csv":
         return f"import pandas as pd\nitems = pd.read_csv(r'{path}')[r'{cfg.get('column','')}'].dropna().tolist()"
     if cfg["source"] == "excel":
-        return f"import pandas as pd\nitems = pd.read_excel(r'{path}')[r'{cfg.get('column','')}'].dropna().tolist()"
+        return (
+            "import pandas as pd\n"
+            f"items = pd.read_excel(r'{path}')[r'{cfg.get('column','')}'].dropna().tolist()\n"
+            "# Requiere openpyxl para archivos .xlsx"
+        )
     if cfg["source"] == "json":
         field = cfg.get("json_field", "")
         return f"import json\nwith open(r'{path}', 'r', encoding='utf-8') as f:\n    data = json.load(f)\nitems = [x.get('{field}') for x in data if x.get('{field}') is not None]"
     return "items = [None]"
 
 
+def split_actions(blocks: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    actions: List[Dict[str, Any]] = []
+    retry_cfg: Dict[str, Any] = {"retries": 0, "wait_seconds": 0}
+    for b in blocks:
+        t = b["type"]
+        p = b["params"]
+        if t == "navigate":
+            actions.append({"navigate": {"url": p["url"], "new_tab": bool(p["new_tab"])}})
+        elif t == "scroll":
+            actions.append({"scroll": {"delta_y": p["delta_y"], "delta_x": p["delta_x"], "smart": p.get("smart", False)}})
+        elif t in ("click_css", "click_xpath"):
+            actions.append({"click": {"selector": p["selector"], "by": "css" if t == "click_css" else "xpath", "description": p["description"]}})
+        elif t in ("input_css", "input_xpath"):
+            actions.append({"type": {"selector": p["selector"], "text": p["text"], "by": "css" if t == "input_css" else "xpath"}})
+        elif t == "retry":
+            retry_cfg = {"retries": int(p.get("retries", 0)), "wait_seconds": int(p.get("wait_seconds", 0)), "note": p.get("note", "")}
+    return actions, retry_cfg
+
+
+def format_actions(actions: List[Dict[str, Any]]) -> str:
+    if not actions:
+        return "    # sin acciones predefinidas\n"
+    lines = []
+    for act in actions:
+        lines.append(f"        {act},")
+    return "\n".join(lines)
+
+
 def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], engine_key: str) -> str:
     task_text = build_task_text(blocks)
     data_loader = render_data_loader(data_cfg)
-    initial_actions = []
-    for b in blocks:
-        if b["type"] == "navigate":
-            initial_actions.append(f"    {{'navigate': {{'url': '{b['params']['url']}', 'new_tab': {str(b['params']['new_tab']).lower()}}}}}")
-        if b["type"] == "scroll":
-            initial_actions.append(f"    {{'scroll': {{'delta_y': {b['params']['delta_y']}, 'delta_x': {b['params']['delta_x']}}}}}")
-    initial_block = ",\n".join(initial_actions) if initial_actions else ""
+    actions, retry_cfg = split_actions(blocks)
+    actions_block = format_actions(actions)
 
     var_name = data_cfg.get("var_name") or "item"
     if data_cfg["source"] == "none":
@@ -298,13 +344,29 @@ async def main():
     {data_loader}
 
     initial_actions = [
-{initial_block}
+{actions_block}
     ]
+
+    retry_count = {retry_cfg.get("retries", 0)}
+    retry_wait = {retry_cfg.get("wait_seconds", 0)}
 
     for {var_name} in items:
         task_text = {task_expr}
-        result = await run_once(task_text, engine, initial_actions)
-        print("Resultado:", result)
+        attempts = 0
+        while True:
+            try:
+                result = await run_once(task_text, engine, initial_actions)
+                if isinstance(result, dict) and not result.get("success", True):
+                    raise RuntimeError(result.get("errors") or "Ejecucion no exitosa")
+                print("Resultado:", result)
+                break
+            except Exception as exc:
+                attempts += 1
+                if attempts > retry_count:
+                    print(f"Error definitivo tras reintentos: {{exc}}")
+                    raise
+                print(f"Reintento {{attempts}}/{{retry_count}} en {{retry_wait}}s por error: {{exc}}")
+                await asyncio.sleep(retry_wait)
 
     await engine.stop()
 
@@ -321,7 +383,9 @@ if st.button("Previsualizar script"):
     if not st.session_state.blocks:
         st.warning("Agrega al menos un bloque.")
     else:
-        st.code(generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.engine_choice), language="python")
+        script_preview = generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.engine_choice)
+        st.code(script_preview, language="python")
+        log_event("BlockBuilder", f"Previsualizacion generada para {len(st.session_state.blocks)} bloques")
 
 if st.button("Guardar en Scripts Automaticos/"):
     if not file_name.endswith(".py"):
@@ -330,5 +394,7 @@ if st.button("Guardar en Scripts Automaticos/"):
         st.error("Agrega al menos un bloque.")
     else:
         target = SCRIPTS_DIR / file_name
-        target.write_text(generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.engine_choice), encoding="utf-8")
+        script_content = generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.engine_choice)
+        target.write_text(script_content, encoding="utf-8")
+        log_success("BlockBuilder", f"Script generado y guardado: {target}")
         st.success(f"Guardado en {target}")

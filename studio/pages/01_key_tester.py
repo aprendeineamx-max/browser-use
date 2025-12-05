@@ -4,18 +4,7 @@ from typing import Dict, List, Tuple
 import requests
 import streamlit as st
 
-LOG_FILE = "Registro_de_logs.txt"
-
-
-def log_line(msg: str) -> None:
-    try:
-        import time
-
-        ts = time.strftime("%Y-%m-%d %H:%M:%S")
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(f"[KeyTester][{ts}] {msg}\n")
-    except Exception:
-        pass
+from studio.utils.logger import log_event, log_error
 
 
 def tail_key(value: str) -> str:
@@ -52,21 +41,21 @@ def fetch_models(provider: str, api_key: str) -> List[str]:
     try:
         if provider == "groq":
             url = "https://api.groq.com/openai/v1/models"
-            log_line(f"Llamando a {url}")
+            log_event("KeyTester", f"Llamando a {url}")
             resp = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=10)
             if resp.ok:
                 data = resp.json()
                 models = [m["id"] for m in data.get("data", [])]
         elif provider == "openrouter":
             url = "https://openrouter.ai/api/v1/models"
-            log_line(f"Llamando a {url}")
+            log_event("KeyTester", f"Llamando a {url}")
             resp = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=10)
             if resp.ok:
                 data = resp.json()
                 models = [m["id"] for m in data.get("data", [])]
         elif provider == "google":
             url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-            log_line(f"Llamando a {url}")
+            log_event("KeyTester", f"Llamando a {url}")
             resp = requests.get(url, timeout=10)
             if resp.ok:
                 data = resp.json()
@@ -74,9 +63,9 @@ def fetch_models(provider: str, api_key: str) -> List[str]:
                 # names come as "models/gemini-1.5-flash-002"
                 models = [name.split("/")[-1] for name in raw if name]
             else:
-                log_line(f"Gemini models fallo HTTP {resp.status_code}: {resp.text}")
+                log_error("KeyTester", f"Gemini models fallo HTTP {resp.status_code}: {resp.text}")
     except Exception as exc:
-        log_line(f"Error obteniendo modelos {provider}: {exc}")
+        log_error("KeyTester", f"Error obteniendo modelos {provider}: {exc}")
     return models
 
 
@@ -84,10 +73,10 @@ def ping_groq(api_key: str) -> Tuple[bool, str]:
     url = "https://api.groq.com/openai/v1/models"
     try:
         resp = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=8)
-        log_line(f"Ping Groq -> {resp.status_code}")
+        log_event("KeyTester", f"Ping Groq -> {resp.status_code}")
         return resp.status_code == 200, f"HTTP {resp.status_code}"
     except Exception as exc:
-        log_line(f"Ping Groq error: {exc}")
+        log_error("KeyTester", f"Ping Groq error: {exc}")
         return False, str(exc)
 
 
@@ -95,10 +84,10 @@ def ping_openrouter(api_key: str) -> Tuple[bool, str]:
     url = "https://openrouter.ai/api/v1/models"
     try:
         resp = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=8)
-        log_line(f"Ping OpenRouter -> {resp.status_code}")
+        log_event("KeyTester", f"Ping OpenRouter -> {resp.status_code}")
         return resp.status_code == 200, f"HTTP {resp.status_code}"
     except Exception as exc:
-        log_line(f"Ping OpenRouter error: {exc}")
+        log_error("KeyTester", f"Ping OpenRouter error: {exc}")
         return False, str(exc)
 
 
@@ -106,10 +95,10 @@ def ping_gemini(api_key: str) -> Tuple[bool, str]:
     url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
     try:
         resp = requests.get(url, timeout=8)
-        log_line(f"Ping Gemini -> {resp.status_code}")
+        log_event("KeyTester", f"Ping Gemini -> {resp.status_code}")
         return resp.status_code == 200, f"HTTP {resp.status_code}"
     except Exception as exc:
-        log_line(f"Ping Gemini error: {exc}")
+        log_error("KeyTester", f"Ping Gemini error: {exc}")
         return False, str(exc)
 
 
@@ -142,7 +131,7 @@ def chat_gemini(api_key: str, model: str, messages: List[Dict[str, str]]) -> str
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     parts = [{"text": m["content"]} for m in messages]
     payload = {"contents": [{"role": "user", "parts": parts}]}
-    log_line(f"Gemini POST {url}")
+    log_event("KeyTester", f"Gemini POST {url}")
     resp = requests.post(url, json=payload, timeout=20)
     resp.raise_for_status()
     data = resp.json()

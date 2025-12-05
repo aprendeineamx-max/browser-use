@@ -13,6 +13,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from studio.utils.logger import log_event, log_error, log_success
 
 SCRIPTS_DIR = Path("Scripts Automaticos")
 SCRIPTS_DIR.mkdir(exist_ok=True)
@@ -40,7 +41,10 @@ selected = st.selectbox("Selecciona un script", options=["(Nuevo)"] + scripts)
 
 content: str = ""
 if selected != "(Nuevo)":
-    content = Path(SCRIPTS_DIR / selected).read_text(encoding="utf-8")
+    try:
+        content = Path(SCRIPTS_DIR / selected).read_text(encoding="utf-8")
+    except Exception as exc:
+        log_error("ScriptManager", f"No se pudo leer {selected}: {exc}")
 
 code = st.text_area(
     "Editor",
@@ -56,6 +60,7 @@ with col1:
             st.error("Elige un archivo existente o usa 'Guardar como'.")
         else:
             Path(SCRIPTS_DIR / selected).write_text(code, encoding="utf-8")
+            log_success("ScriptManager", f"Archivo sobrescrito: {selected}")
             st.success(f"Archivo guardado: {selected}")
 with col2:
     new_name = st.text_input("Guardar como (nombre .py)", value="", key="save_as_name")
@@ -65,4 +70,5 @@ with col2:
         else:
             target = SCRIPTS_DIR / new_name
             target.write_text(code, encoding="utf-8")
+            log_success("ScriptManager", f"Copia guardada: {new_name}")
             st.success(f"Copia guardada en: {new_name}")
