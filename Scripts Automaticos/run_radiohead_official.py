@@ -61,28 +61,28 @@ async def main() -> None:
 		minimum_wait_page_load_time=0.5,
 	)
 
-	# Acción determinista: ir a resultados y SCROLL inmediato para quitar anuncios grandes
+	# Acción determinista: SCROLL SUAVE para no saltarnos el video.
 	initial_actions = [
 		{'navigate': {'url': 'https://www.youtube.com/results?search_query=Radiohead+Daydreaming', 'new_tab': False}},
-		{'scroll': {'delta_y': 400, 'delta_x': 0}}, # Scroll para bajar el anuncio gigante
+		{'scroll': {'delta_y': 150, 'delta_x': 0}}, # Bajamos menos (antes 400 era mucho)
 	]
 
 	task = """
-	Objetivo: Reproducir "Daydreaming" de Radiohead.
+	Objetivo: Reproducir "Daydreaming" de Radiohead (Oficial).
 	
-	1) ESTRATEGIA VISUAL:
-	   - El primer resultado suele ser un ANUNCIO GIGANTE (ignoralo).
-	   - El video real esta mas ABAJO.
-	   - Busca el texto exacto: "Radiohead - Daydreaming".
+	1) IDENTIFICACION:
+	   - El video que buscamos tiene el nombre de canal: "Radiohead" (Verificado).
+	   - CUIDADO: Hay una versión de "SalvaMuñoz" o "[HQ]". ESA NO ES.
+	   - Si ves "SalvaMuñoz", busca ARRIBA o ABAJO de ese video.
 	   
-	2) EJECUCION:
-	   - Si ves "Banjo" o "Trance", ESO NO ES. Baja mas.
-	   - Busca el texto "Radiohead" (el nombre del canal) debajo del titulo.
-	   - Haz click en el Titulo "Radiohead - Daydreaming".
+	2) ACCION VISUAL:
+	   - Ignora la cabecera (Anuncios/Banjo).
+	   - Busca el bloque que diga "Radiohead" (el autor) y dale click al TITULO de ese video.
+	   - Si el ratón falla, intenta usar TAB hasta llegar al título y pulsar Enter.
 	   
-	3) SI FALLA:
-	   - Presiona la tecla 'PageDown' para ver mas resultados.
-	   - Si haces click y no pasa nada, presiona Enter.
+	3) VERIFICACION:
+	   - El video debe empezar a sonar.
+	   - Si no suena, pulsa 'k'.
 	"""
 
 	agent = Agent(
