@@ -30,6 +30,10 @@ with st.expander("Instrucciones", expanded=True):
         """
     )
 
+# Modo headless (toggle)
+headless = st.checkbox("Ejecutar en modo Headless (sin interfaz gráfica)", value=False)
+st.info(f"Headless: {'activado' if headless else 'desactivado'}. Ajusta este valor al generar/ejecutar tus scripts.")
+
 # Listar scripts
 scripts = sorted([p.name for p in SCRIPTS_DIR.glob("*.py")])
 selected = st.selectbox("Selecciona un script", options=["(Nuevo)"] + scripts)
