@@ -112,17 +112,12 @@ class OrchestratorEngine(AutomationEngine):
             return ChatGoogle(model=model)
         return ChatGroq(model=model, temperature=0.0)
 
-    def generate_plan(self, user_task: str, engines: Dict[str, Any]) -> EnginePlan:
+    async def generate_plan(self, user_task: str, engines: Dict[str, Any]) -> EnginePlan:
         prompt = self.build_plan_prompt(user_task, engines)
         log_line("Generando plan con LLM configurado (structured JSON)")
         llm = self.load_planner_llm()
-        # Usamos el método estándar de llamada simple (invoke) y tomamos el contenido
-        completion_obj = llm.invoke(prompt)
-        # Algunos wrappers devuelven dict, otros ChatMessage; normalizamos a string
-        if hasattr(completion_obj, "content"):
-            completion = completion_obj.content
-        else:
-            completion = str(completion_obj)
+        completion_obj = await llm.ainvoke(prompt)
+        completion = completion_obj.content if hasattr(completion_obj, "content") else str(completion_obj)
         try:
             data = json.loads(completion)
             plan = EnginePlan(**data)
@@ -130,7 +125,6 @@ class OrchestratorEngine(AutomationEngine):
             return plan
         except (json.JSONDecodeError, ValidationError) as exc:
             log_line(f"Error parseando plan: {exc}; se usa plan simple")
-            # Plan de respaldo: un solo paso con BrowserUse si disponible
             fallback_engine = "BrowserUseEngine" if "BrowserUseEngine" in engines else next(iter(engines.keys()))
             return EnginePlan(plan=[EngineStep(engine=fallback_engine, task=user_task, context_key="final")])
 
@@ -143,7 +137,7 @@ class OrchestratorEngine(AutomationEngine):
             log_line(f"[Error] {msg}")
             return {"success": False, "result": "", "errors": [msg]}
 
-        plan = self.generate_plan(task, engines)
+        plan = await self.generate_plan(task, engines)
         global_ctx: Dict[str, Any] = {}
         results = []
         for step in plan.plan:
@@ -153,7 +147,6 @@ class OrchestratorEngine(AutomationEngine):
                 results.append({"engine": step.engine, "error": "no disponible"})
                 continue
             eng = engine_cls()
-            # Inyectar contexto previo en la tarea si corresponde
             updated_task = step.task
             for key, val in global_ctx.items():
                 placeholder = f"{{{key}}}"
@@ -175,7 +168,6 @@ class OrchestratorEngine(AutomationEngine):
                 global_ctx[step.context_key] = attempt_result.get("result")
                 results.append({"engine": step.engine, "result": attempt_result})
             else:
-                # stop-on-fail after retries
                 results.append({"engine": step.engine, "result": res})
                 log_line(f"Paso fallido definitivo en {step.engine}: {res.get('errors')}")
                 return {"success": False, "result": res, "errors": res.get("errors"), "plan": plan.dict(), "trace": results}
