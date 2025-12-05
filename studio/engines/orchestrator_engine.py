@@ -14,7 +14,9 @@ from .stagehand_engine import StagehandEngine
 from .snowflake_engine import SnowflakeEngine
 from .lavague_engine import LaVagueEngine
 from studio.utils.sentinel import ensure_config, check_vital_signs
-from browser_use.llm import ChatGroq
+from browser_use.llm import ChatGroq, ChatOpenRouter
+from browser_use.llm.google.chat import ChatGoogle
+from studio.utils.planner_settings import load_config
 
 LOG_FILE = Path("Registro_de_logs.txt")
 
@@ -95,10 +97,23 @@ class OrchestratorEngine(AutomationEngine):
             f"Tarea del usuario: {user_task}"
         )
 
+    def load_planner_llm(self):
+        cfg = load_config()
+        planner = cfg.get("orchestrator_planner", "groq:llama-3.1-8b-instant")
+        try:
+            provider, model = planner.split(":", 1)
+        except ValueError:
+            provider, model = "groq", "llama-3.1-8b-instant"
+        if provider == "openrouter":
+            return ChatOpenRouter(model=model, temperature=0.0)
+        if provider == "google":
+            return ChatGoogle(model=model)
+        return ChatGroq(model=model, temperature=0.0)
+
     def generate_plan(self, user_task: str, engines: Dict[str, Any]) -> EnginePlan:
         prompt = self.build_plan_prompt(user_task, engines)
-        log_line("Generando plan con Groq (structured JSON)")
-        llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.0)
+        log_line("Generando plan con LLM configurado (structured JSON)")
+        llm = self.load_planner_llm()
         completion = llm.complete_text(prompt, stop=None)
         try:
             data = json.loads(completion)
@@ -141,6 +156,10 @@ class OrchestratorEngine(AutomationEngine):
             await eng.stop()
             if res.get("success"):
                 global_ctx[step.context_key] = res.get("result")
+            else:
+                log_line(f"Paso fallido en {step.engine}: {res.get('errors')}")
+                results.append({"engine": step.engine, "result": res})
+                return {"success": False, "result": res, "errors": res.get("errors"), "plan": plan.dict(), "trace": results}
             results.append({"engine": step.engine, "result": res})
 
         final_result = results[-1]["result"] if results else {}
