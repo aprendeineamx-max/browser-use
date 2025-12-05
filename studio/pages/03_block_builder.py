@@ -264,11 +264,8 @@ def render_data_loader(cfg: Dict[str, Any]) -> str:
 
 def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], provider_cfg: Dict[str, Any]) -> str:
     task_text = build_task_text(blocks)
-    llm_import = render_llm_import(provider_cfg["provider"])
-    llm_ctor = render_llm_ctor(provider_cfg["provider"], provider_cfg["model"], provider_cfg.get("api_key", ""))
     data_loader = render_data_loader(data_cfg)
     initial_actions = []
-    # solo navegacion/scroll determinista se ejecuta antes del LLM
     for b in blocks:
         if b["type"] == "navigate":
             initial_actions.append(f"    {{'navigate': {{'url': '{b['params']['url']}', 'new_tab': {str(b['params']['new_tab']).lower()}}}}}")
@@ -277,44 +274,34 @@ def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], prov
     initial_block = ",\n".join(initial_actions) if initial_actions else ""
 
     var_name = data_cfg.get("var_name") or "item"
-    # Interpolacion simple: si source es distinto de none, insertamos la variable
     if data_cfg["source"] == "none":
         task_expr = f"'''{task_text}'''"
     else:
         task_expr = f"f'''{task_text}\\nDato: {{{var_name}}}'''"
 
     script = f"""import asyncio
-from browser_use import Agent, Browser
-{llm_import}
+from studio.engines.browser_use_engine import BrowserUseEngine
 
 
-async def run_once(task_text: str, llm, browser):
-    agent = Agent(
-        task=task_text,
-        llm=llm,
-        browser=browser,
-        use_vision=False,
-        initial_actions=[
-{initial_block}
-        ],
-        max_steps=10,
-        max_failures=3,
-        max_actions_per_step=4,
-        step_timeout=180,
-        llm_timeout=45,
-    )
-    await agent.run()
+async def run_once(task_text: str, engine, initial_actions):
+    return await engine.execute_task(task_text, context={{"initial_actions": initial_actions}})
 
 
 async def main():
-    {llm_ctor}
-    browser = Browser(headless=False, keep_alive=True)
+    engine = BrowserUseEngine(headless=False, use_vision=False)
 
     {data_loader}
 
+    initial_actions = [
+{initial_block}
+    ]
+
     for {var_name} in items:
         task_text = {task_expr}
-        await run_once(task_text, llm, browser)
+        result = await run_once(task_text, engine, initial_actions)
+        print("Resultado:", result)
+
+    await engine.stop()
 
 
 if __name__ == "__main__":
