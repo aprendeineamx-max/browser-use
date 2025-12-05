@@ -210,12 +210,14 @@ from studio.engines.browser_use_engine import BrowserUseEngine
 from studio.engines.stagehand_engine import StagehandEngine
 from studio.engines.skyvern_engine import SkyvernEngine
 from studio.engines.lavague_engine import LaVagueEngine
+from studio.engines.snowflake_engine import SnowflakeEngine
 
 engine_defs = [
     ("browser_use", "Browser Use", BrowserUseEngine, BrowserUseEngine.is_available()),
     ("stagehand", "Stagehand (Nativo - Node.js)", StagehandEngine, StagehandEngine.is_available()),
     ("skyvern", "Skyvern (Standby - Docker)", SkyvernEngine, SkyvernEngine.is_available()),
     ("lavague", "LaVague (Python)", LaVagueEngine, LaVagueEngine.is_available()),
+    ("snowflake", "Snowflake Cortex (Experimental)", SnowflakeEngine, SnowflakeEngine.is_available()),
 ]
 engine_labels = []
 engine_keys = []
@@ -316,6 +318,12 @@ def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], prov
     elif engine_key == "skyvern":
         engine_import = "from studio.engines.skyvern_engine import SkyvernEngine"
         engine_ctor = "SkyvernEngine()"
+    elif engine_key == "lavague":
+        engine_import = "from studio.engines.lavague_engine import LaVagueEngine"
+        engine_ctor = "LaVagueEngine()"
+    elif engine_key == "snowflake":
+        engine_import = "from studio.engines.snowflake_engine import SnowflakeEngine"
+        engine_ctor = "SnowflakeEngine()"
 
     script = f"""import asyncio
 {engine_import}

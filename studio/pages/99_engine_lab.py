@@ -5,6 +5,7 @@ from studio.engines.browser_use_engine import BrowserUseEngine
 from studio.engines.skyvern_engine import SkyvernEngine
 from studio.engines.stagehand_engine import StagehandEngine
 from studio.engines.lavague_engine import LaVagueEngine
+from studio.engines.snowflake_engine import SnowflakeEngine
 
 st.set_page_config(page_title="Engine Lab", layout="wide")
 st.title("Engine Lab (experimental)")
@@ -16,6 +17,7 @@ def available_engines():
     engines.append(("Stagehand (Nativo - Node.js)", StagehandEngine, StagehandEngine.is_available()))
     engines.append(("Skyvern (Standby - Docker)", SkyvernEngine, SkyvernEngine.is_available()))
     engines.append(("LaVague (Python)", LaVagueEngine, LaVagueEngine.is_available()))
+    engines.append(("Snowflake Cortex (Experimental)", SnowflakeEngine, SnowflakeEngine.is_available()))
     labels = []
     keys = []
     classes = []
