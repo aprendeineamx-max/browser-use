@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 import streamlit as st
 
+from studio.utils.sentinel import truncate_logs, log_line
+
 CONFIG_PATH = Path("studio/config.json")
 DEFAULT_CFG = {"profile": "estandar", "lavague_mode": "api"}
 
@@ -34,5 +36,10 @@ if st.button("Guardar ajustes"):
     new_cfg = {"profile": profile, "lavague_mode": lavague_mode}
     save_cfg(new_cfg)
     st.success("Configuracion guardada en studio/config.json")
+
+if st.button("Limpiar logs (mantener ultimas 10 lineas)"):
+    truncate_logs(keep_lines=10)
+    log_line("Solicitud manual: truncar logs desde la UI")
+    st.success("Registro_de_logs.txt truncado (ultimas 10 lineas conservadas).")
 
 st.info(f"Config actual: {cfg}")

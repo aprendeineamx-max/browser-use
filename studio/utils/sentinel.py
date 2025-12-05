@@ -55,3 +55,16 @@ def check_vital_signs(profile: str) -> Dict[str, str]:
         log_line("Modo Sin Limite: sin mitigacion, solo monitoreo.")
 
     return {"prefer_external_api": "false"}
+
+
+def truncate_logs(keep_lines: int = 10) -> None:
+    """Mantiene solo las ultimas `keep_lines` lineas del log para evitar crecimiento infinito."""
+    if not LOG_FILE.exists():
+        return
+    try:
+        lines = LOG_FILE.read_text(encoding="utf-8").splitlines()
+        tail = lines[-keep_lines:] if len(lines) > keep_lines else lines
+        LOG_FILE.write_text("\n".join(tail) + ("\n" if tail else ""), encoding="utf-8")
+        log_line(f"Log truncado a ultimas {keep_lines} lineas")
+    except Exception:
+        pass
