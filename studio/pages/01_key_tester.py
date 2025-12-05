@@ -1,105 +1,239 @@
-"""
-Tester de llaves (Google Gemini y OpenRouter).
-Permite validar rapidamente si una API key es válida y si el modelo responde.
-No guarda tus llaves en disco.
-"""
-
-from __future__ import annotations
-
 import os
 import time
-from typing import Optional, Tuple
+from typing import Dict, List, Tuple
 
 import requests
 import streamlit as st
 
+# Model lists con etiquetas
+GEMINI_MODELS = [
+    ("gemini-1.5-flash-002", "[FREE] gemini-1.5-flash-002"),
+    ("gemini-1.5-pro-exp-0827", "[$$$] gemini-1.5-pro-exp"),
+]
+GROQ_MODELS = [
+    ("llama-3.3-70b-versatile", "[FREE] llama-3.3-70b-versatile"),
+    ("llama-3.1-8b-instant", "[FREE] llama-3.1-8b-instant"),
+    ("mixtral-8x7b-32768", "[FREE] mixtral-8x7b"),
+]
+OPENROUTER_MODELS = [
+    ("meta-llama/llama-3.3-70b-instruct", "[FREE] llama-3.3-70b-instruct"),
+    ("gpt-4o-mini", "[FREE] gpt-4o-mini"),
+    ("gpt-4o", "[$$$] gpt-4o"),
+]
 
-def test_google_key(api_key: str, model: str = "gemini-1.5-flash") -> Tuple[bool, str]:
+
+def tail_key(value: str) -> str:
+    return value[-4:] if value else "????"
+
+
+def detect_keys() -> Dict[str, List[Tuple[str, str]]]:
     """
-    Prueba simple: countTokens en el modelo indicado.
-    Devuelve (ok, mensaje).
+    Devuelve diccionario por proveedor -> lista de (env_var, value).
     """
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:countTokens?key={api_key}"
-    payload = {"contents": [{"parts": [{"text": "ping"}]}]}
+    env = os.environ
+    providers: Dict[str, List[Tuple[str, str]]] = {
+        "google": [],
+        "groq": [],
+        "openrouter": [],
+    }
+    for name, val in env.items():
+        low = name.lower()
+        if "groq_api_key" in low:
+            providers["groq"].append((name, val))
+        if "openrouter_api_key" in low:
+            providers["openrouter"].append((name, val))
+        if "google_api_key" in low:
+            providers["google"].append((name, val))
+    return providers
+
+
+def ping_groq(api_key: str) -> Tuple[bool, str]:
+    url = "https://api.groq.com/openai/v1/models"
     try:
-        resp = requests.post(url, json=payload, timeout=15)
-        if resp.status_code == 200:
-            return True, "OK"
-        return False, f"{resp.status_code} - {resp.text}"
-    except Exception as exc:  # network/error
-        return False, f"Error: {exc}"
+        resp = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=8)
+        return resp.status_code == 200, f"HTTP {resp.status_code}"
+    except Exception as exc:
+        return False, str(exc)
 
 
-def test_openrouter_key(api_key: str, model: str = "meta-llama/llama-3-8b-instruct:free") -> Tuple[bool, str]:
-    """
-    Prueba: llamar a /api/v1/chat/completions con un prompt mínimo.
-    """
+def ping_openrouter(api_key: str) -> Tuple[bool, str]:
+    url = "https://openrouter.ai/api/v1/models"
+    try:
+        resp = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=8)
+        return resp.status_code == 200, f"HTTP {resp.status_code}"
+    except Exception as exc:
+        return False, str(exc)
+
+
+def ping_gemini(api_key: str) -> Tuple[bool, str]:
+    url = f"https://generativelanguage.googleapis.com/v1/models?key={api_key}"
+    try:
+        resp = requests.get(url, timeout=8)
+        return resp.status_code == 200, f"HTTP {resp.status_code}"
+    except Exception as exc:
+        return False, str(exc)
+
+
+def chat_openrouter(api_key: str, model: str, messages: List[Dict[str, str]]) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "HTTP-Referer": "http://localhost",
-        "X-Title": "Browser-Use-Studio",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": "ping"}],
-        "max_tokens": 4,
-    }
-    try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=15)
-        if resp.status_code == 200:
-            return True, "OK"
-        return False, f"{resp.status_code} - {resp.text}"
-    except Exception as exc:  # network/error
-        return False, f"Error: {exc}"
+    payload = {"model": model, "messages": messages, "max_tokens": 120}
+    resp = requests.post(url, headers={"Authorization": f"Bearer {api_key}"}, json=payload, timeout=20)
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]
 
 
-st.set_page_config(page_title="Tester de llaves", layout="wide")
-st.title("Tester de llaves (Google / OpenRouter)")
+def chat_groq(api_key: str, model: str, messages: List[Dict[str, str]]) -> str:
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    payload = {"model": model, "messages": messages, "max_tokens": 120}
+    resp = requests.post(url, headers={"Authorization": f"Bearer {api_key}"}, json=payload, timeout=20)
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]
 
-with st.expander("Instrucciones", expanded=True):
-    st.markdown(
-        """
-        - Nada se guarda en disco; las llaves viven solo en la sesión de Streamlit.
-        - Se hace una llamada mínima: `countTokens` en Gemini, chat de 1 token en OpenRouter.
-        - Usa un modelo libre/ligero para evitar costos.
-        """
-    )
 
-tab_google, tab_openrouter = st.tabs(["Google Gemini", "OpenRouter"])
+def chat_gemini(api_key: str, model: str, messages: List[Dict[str, str]]) -> str:
+    # Usamos la API de countTokens como ping ligero; para chat, la API requiere safety settings.
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    parts = [{"text": m["content"]} for m in messages]
+    payload = {"contents": [{"role": "user", "parts": parts}]}
+    resp = requests.post(url, json=payload, timeout=20)
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
 
+
+# ---------------- UI ----------------
+
+st.set_page_config(page_title="Centro de Comando de Modelos", layout="wide")
+st.title("Centro de Comando de Modelos (Tester de Llaves)")
+
+st.markdown(
+    """
+Selecciona una key detectada, elige modelo con etiqueta de costo, y conversa para validar latencia/calidad.
+Botón "Verificar Todas" hace un ping rápido 1-token por proveedor.
+"""
+)
+
+providers = detect_keys()
+
+with st.expander("Keys detectadas"):
+    for prov, lst in providers.items():
+        st.write(f"**{prov.upper()}** ({len(lst)})")
+        for name, val in lst:
+            st.write(f"- {name} (…{tail_key(val)})")
+
+tab_google, tab_groq, tab_or = st.tabs(["Google Gemini", "Groq", "OpenRouter"])
+
+# Google tab
 with tab_google:
-    st.subheader("Google Gemini")
-    default_models = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-1.5-pro"]
-    model = st.selectbox("Modelo", default_models, index=0)
-    key_input = st.text_input("API Key (no se guarda)", type="password", key="google_key_input")
-    if st.button("Probar Gemini", type="primary"):
-        if not key_input:
-            st.error("Ingresa la API key de Google.")
-        else:
-            with st.spinner("Probando clave Gemini..."):
-                ok, msg = test_google_key(key_input.strip(), model=model)
-                if ok:
-                    st.success(f"✅ Key válida para {model}: {msg}")
-                else:
-                    st.error(f"❌ Falló: {msg}")
+    keys = providers.get("google", [])
+    key_names = [k for k, _ in keys]
+    sel_key = st.selectbox("API Key (Google)", key_names, index=0 if key_names else None)
+    sel_model = st.selectbox("Modelo", [label for _, label in GEMINI_MODELS])
+    model_value = [v for v, lbl in GEMINI_MODELS if lbl == sel_model][0] if GEMINI_MODELS else ""
+    st.write(f"Usando key {sel_key} (…{tail_key(os.environ.get(sel_key,''))})")
 
-with tab_openrouter:
-    st.subheader("OpenRouter")
-    default_models = [
-        "meta-llama/llama-3-8b-instruct:free",
-        "mistralai/mistral-7b-instruct:free",
-    ]
-    model = st.selectbox("Modelo", default_models, index=0, key="or_model")
-    key_input = st.text_input("API Key (no se guarda)", type="password", key="or_key_input")
-    if st.button("Probar OpenRouter", type="primary", key="btn_or"):
-        if not key_input:
-            st.error("Ingresa la API key de OpenRouter.")
-        else:
-            with st.spinner("Probando clave OpenRouter..."):
-                ok, msg = test_openrouter_key(key_input.strip(), model=model)
-                if ok:
-                    st.success(f"✅ Key válida para {model}: {msg}")
-                else:
-                    st.error(f"❌ Falló: {msg}")
+    if st.button("Verificar key Google"):
+        ok, info = ping_gemini(os.environ.get(sel_key, ""))
+        st.success(f"Key OK ({info})" if ok else f"Key falló ({info})")
+
+    st.divider()
+    st.write("Chat de prueba")
+    for message in st.session_state.get("google_messages", []):
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    if prompt := st.chat_input("Pregunta a Gemini (FREE = flash)"):
+        msgs = st.session_state.get("google_messages", [])
+        msgs.append({"role": "user", "content": prompt})
+        st.session_state["google_messages"] = msgs
+        with st.spinner("Consultando Gemini..."):
+            try:
+                reply = chat_gemini(os.environ.get(sel_key, ""), model_value, [{"role": "user", "content": prompt}])
+            except Exception as exc:
+                reply = f"Error: {exc}"
+        msgs.append({"role": "assistant", "content": reply})
+        st.session_state["google_messages"] = msgs
+        with st.chat_message("assistant"):
+            st.markdown(reply)
+
+# Groq tab
+with tab_groq:
+    keys = providers.get("groq", [])
+    key_names = [k for k, _ in keys]
+    sel_key = st.selectbox("API Key (Groq)", key_names, index=0 if key_names else None)
+    sel_model = st.selectbox("Modelo", [label for _, label in GROQ_MODELS])
+    model_value = [v for v, lbl in GROQ_MODELS if lbl == sel_model][0] if GROQ_MODELS else ""
+    st.write(f"Usando key {sel_key} (…{tail_key(os.environ.get(sel_key,''))})")
+
+    if st.button("Verificar key Groq"):
+        ok, info = ping_groq(os.environ.get(sel_key, ""))
+        st.success(f"Key OK ({info})" if ok else f"Key falló ({info})")
+
+    st.divider()
+    st.write("Chat de prueba")
+    for message in st.session_state.get("groq_messages", []):
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    if prompt := st.chat_input("Pregunta a Groq (Llama3 free)"):
+        msgs = st.session_state.get("groq_messages", [])
+        msgs.append({"role": "user", "content": prompt})
+        st.session_state["groq_messages"] = msgs
+        with st.spinner("Consultando Groq..."):
+            try:
+                reply = chat_groq(os.environ.get(sel_key, ""), model_value, [{"role": "user", "content": prompt}])
+            except Exception as exc:
+                reply = f"Error: {exc}"
+        msgs.append({"role": "assistant", "content": reply})
+        st.session_state["groq_messages"] = msgs
+        with st.chat_message("assistant"):
+            st.markdown(reply)
+
+# OpenRouter tab
+with tab_or:
+    keys = providers.get("openrouter", [])
+    key_names = [k for k, _ in keys]
+    sel_key = st.selectbox("API Key (OpenRouter)", key_names, index=0 if key_names else None)
+    sel_model = st.selectbox("Modelo", [label for _, label in OPENROUTER_MODELS])
+    model_value = [v for v, lbl in OPENROUTER_MODELS if lbl == sel_model][0] if OPENROUTER_MODELS else ""
+    st.write(f"Usando key {sel_key} (…{tail_key(os.environ.get(sel_key,''))})")
+
+    if st.button("Verificar key OpenRouter"):
+        ok, info = ping_openrouter(os.environ.get(sel_key, ""))
+        st.success(f"Key OK ({info})" if ok else f"Key falló ({info})")
+
+    st.divider()
+    st.write("Chat de prueba")
+    for message in st.session_state.get("or_messages", []):
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    if prompt := st.chat_input("Pregunta a OpenRouter"):
+        msgs = st.session_state.get("or_messages", [])
+        msgs.append({"role": "user", "content": prompt})
+        st.session_state["or_messages"] = msgs
+        with st.spinner("Consultando OpenRouter..."):
+            try:
+                reply = chat_openrouter(os.environ.get(sel_key, ""), model_value, [{"role": "user", "content": prompt}])
+            except Exception as exc:
+                reply = f"Error: {exc}"
+        msgs.append({"role": "assistant", "content": reply})
+        st.session_state["or_messages"] = msgs
+        with st.chat_message("assistant"):
+            st.markdown(reply)
+
+
+st.divider()
+st.subheader("Verificar Todas las Keys detectadas")
+
+if st.button("Verificar Todas"):
+    summary = []
+    for name, val in providers.get("google", []):
+        ok, info = ping_gemini(val)
+        summary.append(f"Google {name} (…{tail_key(val)}): {'OK' if ok else 'FAIL'} {info}")
+    for name, val in providers.get("groq", []):
+        ok, info = ping_groq(val)
+        summary.append(f"Groq {name} (…{tail_key(val)}): {'OK' if ok else 'FAIL'} {info}")
+    for name, val in providers.get("openrouter", []):
+        ok, info = ping_openrouter(val)
+        summary.append(f"OpenRouter {name} (…{tail_key(val)}): {'OK' if ok else 'FAIL'} {info}")
+    st.code("\n".join(summary) or "No hay keys detectadas", language="text")
