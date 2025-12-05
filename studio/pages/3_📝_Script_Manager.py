@@ -7,7 +7,8 @@ st.title("📝 Script Manager")
 st.info("🚧 En construcción: Aquí podrás cargar y editar scripts.")
 
 # Access to automated scripts
-SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Scripts Automaticos")
+# Go up: pages -> studio -> browser-use -> Scripts Automaticos
+SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Scripts Automaticos")
 
 if os.path.exists(SCRIPTS_DIR):
     scripts = [f for f in os.listdir(SCRIPTS_DIR) if f.endswith(".py")]
