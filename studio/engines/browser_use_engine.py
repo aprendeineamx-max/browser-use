@@ -30,6 +30,10 @@ class BrowserUseEngine(AutomationEngine):
     Incluye manejo de fallback cuando el proveedor devuelve errores de JSON/schema.
     """
 
+    @classmethod
+    def is_available(cls) -> bool:
+        return True
+
     def __init__(
         self,
         model: str = "meta-llama/llama-4-maverick-17b-128e-instruct",

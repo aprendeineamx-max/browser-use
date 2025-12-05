@@ -10,6 +10,11 @@ class AutomationEngine(abc.ABC):
     Cada motor (Browser-Use, Skyvern, Stagehand, LaVague) debe implementar estos metodos.
     """
 
+    @classmethod
+    @abc.abstractmethod
+    def is_available(cls) -> bool:
+        """Detecta si el motor puede ejecutarse en el entorno actual (deps, binarios, docker, etc.)."""
+
     @abc.abstractmethod
     async def start(self) -> None:
         """Inicializa recursos (browser, cliente HTTP, etc.)."""

@@ -54,6 +54,8 @@ def init_state():
             "model": "llama-3.1-8b-instant",
             "api_key": "",
         }
+    if "engine_choice" not in st.session_state:
+        st.session_state.engine_choice = "browser_use"
 
 
 init_state()
@@ -202,6 +204,31 @@ provider_cfg["api_key"] = st.text_input("API Key (opcional en claro, no se guard
 st.session_state.provider_cfg = provider_cfg
 
 # -------------------------
+# Seleccion de motor (Strategy)
+# -------------------------
+from studio.engines.browser_use_engine import BrowserUseEngine
+from studio.engines.stagehand_engine import StagehandEngine
+from studio.engines.skyvern_engine import SkyvernEngine
+
+engine_defs = [
+    ("browser_use", "Browser Use", BrowserUseEngine, BrowserUseEngine.is_available()),
+    ("stagehand", "Stagehand", StagehandEngine, StagehandEngine.is_available()),
+    ("skyvern", "Skyvern", SkyvernEngine, SkyvernEngine.is_available()),
+]
+engine_labels = []
+engine_keys = []
+for key, label, _, ok in engine_defs:
+    engine_labels.append(label if ok else f"{label} (No disponible)")
+    engine_keys.append(key)
+
+current_choice = st.session_state.engine_choice
+default_idx = engine_keys.index(current_choice) if current_choice in engine_keys else 0
+selected_label = st.selectbox("Motor de ejecucion", engine_labels, index=default_idx)
+selected_key = engine_keys[engine_labels.index(selected_label)]
+st.session_state.engine_choice = selected_key
+
+
+# -------------------------
 # Cargar script existente (texto)
 # -------------------------
 st.subheader("Cargar script existente")
@@ -262,7 +289,7 @@ def render_data_loader(cfg: Dict[str, Any]) -> str:
     return "items = [None]"
 
 
-def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], provider_cfg: Dict[str, Any]) -> str:
+def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], provider_cfg: Dict[str, Any], engine_key: str) -> str:
     task_text = build_task_text(blocks)
     data_loader = render_data_loader(data_cfg)
     initial_actions = []
@@ -279,8 +306,17 @@ def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], prov
     else:
         task_expr = f"f'''{task_text}\\nDato: {{{var_name}}}'''"
 
+    engine_import = "from studio.engines.browser_use_engine import BrowserUseEngine"
+    engine_ctor = "BrowserUseEngine(headless=False, use_vision=False)"
+    if engine_key == "stagehand":
+        engine_import = "from studio.engines.stagehand_engine import StagehandEngine"
+        engine_ctor = "StagehandEngine()"
+    elif engine_key == "skyvern":
+        engine_import = "from studio.engines.skyvern_engine import SkyvernEngine"
+        engine_ctor = "SkyvernEngine()"
+
     script = f"""import asyncio
-from studio.engines.browser_use_engine import BrowserUseEngine
+{engine_import}
 
 
 async def run_once(task_text: str, engine, initial_actions):
@@ -288,7 +324,7 @@ async def run_once(task_text: str, engine, initial_actions):
 
 
 async def main():
-    engine = BrowserUseEngine(headless=False, use_vision=False)
+    engine = {engine_ctor}
 
     {data_loader}
 
@@ -316,7 +352,7 @@ if st.button("Previsualizar script"):
     if not st.session_state.blocks:
         st.warning("Agrega al menos un bloque.")
     else:
-        st.code(generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.provider_cfg), language="python")
+        st.code(generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.provider_cfg, st.session_state.engine_choice), language="python")
 
 if st.button("Guardar en Scripts Automaticos/"):
     if not file_name.endswith(".py"):
@@ -325,5 +361,5 @@ if st.button("Guardar en Scripts Automaticos/"):
         st.error("Agrega al menos un bloque.")
     else:
         target = SCRIPTS_DIR / file_name
-        target.write_text(generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.provider_cfg), encoding="utf-8")
+        target.write_text(generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.provider_cfg, st.session_state.engine_choice), encoding="utf-8")
         st.success(f"Guardado en {target}")

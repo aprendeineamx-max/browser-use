@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +12,7 @@ LOG_FILE = Path("Registro_de_logs.txt")
 
 def log_line(message: str) -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"[Engine:Skyvern][{ts}] {message}"
+    line = f"[Engine:Stagehand][{ts}] {message}"
     try:
         with LOG_FILE.open("a", encoding="utf-8") as f:
             f.write(line + "\n")
@@ -21,32 +20,31 @@ def log_line(message: str) -> None:
         pass
 
 
-class SkyvernEngine(AutomationEngine):
+class StagehandEngine(AutomationEngine):
     """
-    Esqueleto de motor para Skyvern.
-    Simula la conexion a un contenedor docker y devuelve un mensaje mock.
+    Esqueleto para Stagehand (Node/Playwright).
+    Comprueba presencia de Node y declara disponibilidad.
     """
 
     @classmethod
     def is_available(cls) -> bool:
         try:
-            subprocess.run(["docker", "--version"], check=True, capture_output=True)
+            subprocess.run(["node", "--version"], check=True, capture_output=True)
             return True
         except Exception:
-            log_line("Skyvern en Standby: Docker no disponible")
+            log_line("Stagehand no disponible: Node.js no detectado")
             return False
 
     async def start(self) -> None:
-        log_line("Iniciando motor Skyvern (mock).")
+        log_line("Iniciando motor Stagehand (placeholder).")
 
     async def stop(self) -> None:
-        log_line("Deteniendo motor Skyvern (mock).")
+        log_line("Deteniendo motor Stagehand (placeholder).")
 
     async def execute_task(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         await self.start()
         log_line(f"Tarea recibida: {task}")
-        await asyncio.sleep(2)
-        msg = "[MOCK] Skyvern Engine: Conectando a contenedor Docker... (No implementado aún)"
+        msg = "Motor Stagehand detectado y listo para implementación"
         log_line(msg)
         await self.stop()
         return {"success": True, "result": msg, "errors": []}
