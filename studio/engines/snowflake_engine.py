@@ -28,23 +28,22 @@ class SnowflakeEngine(AutomationEngine):
     Ejecuta snowflake.cortex.complete en modo texto plano.
     """
 
-    def __init__(self) -> None:
-        self.conn_params: Optional[Dict[str, str]] = None
-
     @classmethod
     def is_available(cls) -> bool:
         try:
             import snowflake.connector  # noqa: F401
         except Exception:
             return False
-        required = [
-            "SNOWFLAKE_USER",
-            "SNOWFLAKE_PASSWORD",
+        base_required = [
             "SNOWFLAKE_ACCOUNT",
             "SNOWFLAKE_WAREHOUSE",
             "SNOWFLAKE_DATABASE",
             "SNOWFLAKE_SCHEMA",
         ]
+        pat = os.environ.get("SNOWFLAKE_PAT")
+        if pat:
+            return all(os.environ.get(k) for k in base_required)
+        required = base_required + ["SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD"]
         return all(os.environ.get(k) for k in required)
 
     async def start(self) -> None:
@@ -58,25 +57,31 @@ class SnowflakeEngine(AutomationEngine):
     def _run_query_sync(self, task: str) -> Dict[str, Any]:
         import snowflake.connector
 
-        user = os.environ.get("SNOWFLAKE_USER")
-        password = os.environ.get("SNOWFLAKE_PASSWORD")
         account = os.environ.get("SNOWFLAKE_ACCOUNT")
         warehouse = os.environ.get("SNOWFLAKE_WAREHOUSE")
         database = os.environ.get("SNOWFLAKE_DATABASE")
         schema = os.environ.get("SNOWFLAKE_SCHEMA")
+        pat = os.environ.get("SNOWFLAKE_PAT")
+
+        conn_kwargs: Dict[str, Any] = {
+            "account": account,
+            "warehouse": warehouse,
+            "database": database,
+            "schema": schema,
+        }
+        if pat:
+            log_line("Usando autenticacion por PAT (token)")
+            conn_kwargs["authenticator"] = "SNOWFLAKE_JWT"
+            conn_kwargs["token"] = pat
+        else:
+            conn_kwargs["user"] = os.environ.get("SNOWFLAKE_USER")
+            conn_kwargs["password"] = os.environ.get("SNOWFLAKE_PASSWORD")
 
         query = (
             "select snowflake.cortex.complete('llama3-70b', "
             f"{{'messages':[{{'role':'user','content':'{task}'}}]}}) as resp"
         )
-        conn = snowflake.connector.connect(
-            user=user,
-            password=password,
-            account=account,
-            warehouse=warehouse,
-            database=database,
-            schema=schema,
-        )
+        conn = snowflake.connector.connect(**conn_kwargs)
         try:
             cur = conn.cursor()
             cur.execute(query)

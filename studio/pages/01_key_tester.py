@@ -73,6 +73,8 @@ def fetch_models(provider: str, api_key: str) -> List[str]:
                 raw = [m.get("name", "") for m in data.get("models", [])]
                 # names come as "models/gemini-1.5-flash-002"
                 models = [name.split("/")[-1] for name in raw if name]
+            else:
+                log_line(f"Gemini models fallo HTTP {resp.status_code}: {resp.text}")
     except Exception as exc:
         log_line(f"Error obteniendo modelos {provider}: {exc}")
     return models
@@ -111,9 +113,16 @@ def ping_gemini(api_key: str) -> Tuple[bool, str]:
         return False, str(exc)
 
 
+def with_system(messages: List[Dict[str, str]], text: str) -> List[Dict[str, str]]:
+    has_system = any(m.get("role") == "system" for m in messages)
+    if has_system:
+        return messages
+    return [{"role": "system", "content": text}] + messages
+
+
 def chat_openrouter(api_key: str, model: str, messages: List[Dict[str, str]]) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"
-    payload = {"model": model, "messages": messages, "max_tokens": 120}
+    payload = {"model": model, "messages": with_system(messages, "Responde breve y claro."), "max_tokens": 120}
     resp = requests.post(url, headers={"Authorization": f"Bearer {api_key}"}, json=payload, timeout=20)
     resp.raise_for_status()
     data = resp.json()
@@ -122,7 +131,7 @@ def chat_openrouter(api_key: str, model: str, messages: List[Dict[str, str]]) ->
 
 def chat_groq(api_key: str, model: str, messages: List[Dict[str, str]]) -> str:
     url = "https://api.groq.com/openai/v1/chat/completions"
-    payload = {"model": model, "messages": messages, "max_tokens": 120}
+    payload = {"model": model, "messages": with_system(messages, "Responde breve y claro."), "max_tokens": 120}
     resp = requests.post(url, headers={"Authorization": f"Bearer {api_key}"}, json=payload, timeout=20)
     resp.raise_for_status()
     data = resp.json()
@@ -133,6 +142,7 @@ def chat_gemini(api_key: str, model: str, messages: List[Dict[str, str]]) -> str
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     parts = [{"text": m["content"]} for m in messages]
     payload = {"contents": [{"role": "user", "parts": parts}]}
+    log_line(f"Gemini POST {url}")
     resp = requests.post(url, json=payload, timeout=20)
     resp.raise_for_status()
     data = resp.json()

@@ -2,11 +2,9 @@
 Block Builder (avanzado)
 - Nuevos tipos de bloque: click/input por CSS o XPath, scroll/reintentos.
 - Datos externos: CSV/Excel/JSON para iterar tareas.
-- Configuración de instancia: proveedor/modelo/API key en el script generado.
 - Edición de scripts existentes (texto) desde Scripts Automaticos/.
 
-Nota: El builder genera scripts orientados a LLM (ChatGroq/OpenRouter/Google) con instrucciones
-detalladas y bloques convertidos a texto. Usa initial_actions solo para navegar/scroll determinista.
+Nota: Las API keys se gestionan en Key Tester/Settings; el builder solo arma lógica de bloques y elige motor.
 """
 
 from __future__ import annotations
@@ -28,7 +26,7 @@ with st.expander("Instrucciones", expanded=True):
         """
         - Añade bloques (navegar, scroll, click/input por CSS/XPath, reintentos).
         - Opcional: define una fuente de datos (CSV/Excel/JSON) para iterar.
-        - Configura proveedor/modelo/API key para el script resultante.
+        - Elige el motor (Browser Use, Stagehand, etc.). Las keys se configuran en el Key Tester/Settings.
         - Genera un `.py` en `Scripts Automaticos/`.
         """
     )
@@ -47,12 +45,6 @@ def init_state():
             "column": "",
             "json_field": "",
             "var_name": "item",
-        }
-    if "provider_cfg" not in st.session_state:
-        st.session_state.provider_cfg = {
-            "provider": "groq",
-            "model": "llama-3.1-8b-instant",
-            "api_key": "",
         }
     if "engine_choice" not in st.session_state:
         st.session_state.engine_choice = "browser_use"
@@ -190,18 +182,8 @@ if data_cfg["source"] != "none":
         except Exception:
             rows_detected = None
     if rows_detected is not None:
-        st.info(f"Modo de Datos Activo: {rows_detected} filas detectadas", icon="ℹ️")
+        st.info(f"Modo de Datos Activo: {rows_detected} filas detectadas")
 st.session_state.data_cfg = data_cfg
-
-# -------------------------
-# Configuracion de instancia
-# -------------------------
-st.subheader("Configuración de instancia (proveedor/modelo/API key)")
-provider_cfg = st.session_state.provider_cfg
-provider_cfg["provider"] = st.selectbox("Proveedor", ["groq", "openrouter", "google"], index=["groq", "openrouter", "google"].index(provider_cfg["provider"]))
-provider_cfg["model"] = st.text_input("Modelo", value=provider_cfg["model"])
-provider_cfg["api_key"] = st.text_input("API Key (opcional en claro, no se guarda)", value=provider_cfg["api_key"], type="password")
-st.session_state.provider_cfg = provider_cfg
 
 # -------------------------
 # Seleccion de motor (Strategy)
@@ -255,29 +237,6 @@ def build_task_text(blocks: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def render_llm_import(provider: str) -> str:
-    if provider == "groq":
-        return "from browser_use.llm import ChatGroq"
-    if provider == "openrouter":
-        return "from browser_use.llm import ChatOpenRouter"
-    if provider == "google":
-        return "from browser_use.llm.google.chat import ChatGoogle"
-    return "from browser_use.llm import ChatGroq"
-
-
-def render_llm_ctor(provider: str, model: str, api_key: str) -> str:
-    key_part = ""
-    if api_key:
-        key_part = f", api_key='{api_key}'"
-    if provider == "groq":
-        return f"llm = ChatGroq(model='{model}', temperature=0.0{key_part})"
-    if provider == "openrouter":
-        return f"llm = ChatOpenRouter(model='{model}', temperature=0.0{key_part})"
-    if provider == "google":
-        return f"llm = ChatGoogle(model='{model}'{key_part})"
-    return f"llm = ChatGroq(model='{model}', temperature=0.0{key_part})"
-
-
 def render_data_loader(cfg: Dict[str, Any]) -> str:
     if cfg["source"] == "none":
         return "items = [None]"
@@ -293,7 +252,7 @@ def render_data_loader(cfg: Dict[str, Any]) -> str:
     return "items = [None]"
 
 
-def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], provider_cfg: Dict[str, Any], engine_key: str) -> str:
+def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], engine_key: str) -> str:
     task_text = build_task_text(blocks)
     data_loader = render_data_loader(data_cfg)
     initial_actions = []
@@ -362,7 +321,7 @@ if st.button("Previsualizar script"):
     if not st.session_state.blocks:
         st.warning("Agrega al menos un bloque.")
     else:
-        st.code(generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.provider_cfg, st.session_state.engine_choice), language="python")
+        st.code(generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.engine_choice), language="python")
 
 if st.button("Guardar en Scripts Automaticos/"):
     if not file_name.endswith(".py"):
@@ -371,5 +330,5 @@ if st.button("Guardar en Scripts Automaticos/"):
         st.error("Agrega al menos un bloque.")
     else:
         target = SCRIPTS_DIR / file_name
-        target.write_text(generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.provider_cfg, st.session_state.engine_choice), encoding="utf-8")
+        target.write_text(generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.engine_choice), encoding="utf-8")
         st.success(f"Guardado en {target}")
