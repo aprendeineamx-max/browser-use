@@ -48,23 +48,31 @@ class StagehandEngine(AutomationEngine):
         log_line(f"Tarea recibida: {task}")
         try:
             cmd = NODE_CMD + [task]
-            completed = subprocess.run(cmd, capture_output=True, text=True)
-            stdout = completed.stdout.strip()
-            stderr = completed.stderr.strip()
+            completed = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            stdout = (completed.stdout or "").strip()
+            stderr = (completed.stderr or "").strip()
             if stdout:
-                try:
-                    import json
+                lines = [l for l in stdout.splitlines() if l.strip()]
+                parsed = None
+                import json
 
-                    data = json.loads(stdout)
-                    success = bool(data.get("success"))
-                    result = data.get("result")
-                    error = data.get("error")
+                for line in reversed(lines):
+                    try:
+                        parsed = json.loads(line)
+                        break
+                    except Exception:
+                        continue
+                if parsed:
+                    success = bool(parsed.get("success"))
+                    result = parsed.get("result")
+                    error = parsed.get("error")
                     if not success:
                         log_line(f"Stagehand devolvio error: {error}")
-                    return {"success": success, "result": result, "errors": [error] if error else []}
-                except Exception as parse_err:
-                    log_line(f"No se pudo parsear salida Stagehand: {parse_err}")
-                    return {"success": False, "result": stdout, "errors": [str(parse_err), stderr]}
+                    else:
+                        log_line("Stagehand ejecucion exitosa")
+                    return {"success": success, "result": result or stdout, "errors": [error] if error else []}
+                log_line("No se pudo parsear salida Stagehand (sin JSON valido)")
+                return {"success": False, "result": stdout, "errors": [stderr or "parse_error"]}
             return {"success": False, "result": "", "errors": ["Sin salida de Stagehand", stderr]}
         except Exception as exc:
             log_line(f"Error ejecutando Stagehand: {exc}")
