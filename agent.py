@@ -13,55 +13,40 @@ load_dotenv()
 
 T = TypeVar('T')
 
-class FallbackLLM(BaseChatModel):
-    def __init__(self, primary: BaseChatModel, fallback: BaseChatModel):
-        self.primary = primary
-        self.fallback = fallback
-        self.model = getattr(primary, 'model', 'fallback-wrapper')
-
-    @property
-    def provider(self) -> str:
-        return f"{self.primary.provider}-with-fallback"
-
-    @property
-    def name(self) -> str:
-        return self.primary.name
-
-    def _get_usage(self, response: Any) -> Optional[ChatInvokeUsage]:
-        return None
-
-    async def ainvoke(
-        self, messages: list[BaseMessage], output_format: type[T] | None = None
-    ) -> ChatInvokeCompletion[T] | ChatInvokeCompletion[str]:
-        try:
-            # print(f"Trying primary model: {self.primary.name}...") 
-            return await self.primary.ainvoke(messages, output_format)
-        except Exception as e:
-            print(f"\n⚠️ Primary model failed: {e}")
-            print(f"🔄 Switching to fallback model: {self.fallback.name}...\n")
-            return await self.fallback.ainvoke(messages, output_format)
+import sys
 
 async def main():
     # Configure Google Gemini (Primary) - Direct API
-    # Switching to 1.5-Flash for better stability and rate limits
+    # Reverting to gemini-2.0-flash-exp as 1.5-pro failed to navigate (tool use issue)
     google_llm = ChatGoogle(
-        model='gemini-1.5-flash',
+        model='gemini-2.0-flash-exp',
         api_key=os.getenv('GOOGLE_API_KEY')
     )
     
-    # Use Gemini directly without fallback for now to avoid Groq errors
+    # Simplify: Use single LLM to avoid credit errors
     llm = google_llm
 
-    print("\n🌐 Initializing Browser...")
+    print("\n🌐 Initializing Local Browser...")
+    # Standard local browser
     browser = Browser()
     
+    # Check for command line arguments
+    initial_task = None
+    if len(sys.argv) > 1:
+        initial_task = " ".join(sys.argv[1:])
+
     try:
         print("\n✅ Ready! The agent is waiting for your commands.")
         print("Type 'exit' or 'quit' to close the program.\n")
         
         while True:
             try:
-                task = input("🤖 What task should I perform? > ")
+                if initial_task:
+                    task = initial_task
+                    initial_task = None # Execute once then fall back to interactive
+                    print(f"🤖 Processing command from arguments: {task}")
+                else:
+                    task = input("🤖 What task should I perform? > ")
                 if not task.strip():
                     continue
                     

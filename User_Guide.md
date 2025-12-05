@@ -1,51 +1,54 @@
-# Guía de Usuario para Agente Browser-Use
+# Guia de Usuario para Agente Browser-Use
 
-Esta guía te ayudará a utilizar el agente de navegación web automatizado que hemos configurado. Este programa utiliza inteligencia artificial para controlar un navegador web y realizar tareas por ti.
+Esta guia te ayudara a utilizar el agente de navegacion web automatizado que hemos configurado. Este programa utiliza inteligencia artificial para controlar un navegador web y realizar tareas por ti.
 
-## 🚀 Cómo Iniciar
+## Como Iniciar
 
 ### 1. Ejecutar el Agente
-Para iniciar el programa, abre tu terminal (PowerShell o CMD) en la carpeta del proyecto y ejecuta:
-
+En la carpeta del proyecto:
 ```powershell
 .\venv\Scripts\python agent.py
 ```
-
-Al hacerlo, verás que se abre una ventana del navegador Chromium y el programa esperará tus instrucciones.
+Se abrira el navegador Chromium y el programa esperara tus instrucciones.
 
 ### 2. Modo Interactivo
-Hemos actualizado el agente para que funcione en un **bucle infinito**. Esto significa que:
-1.  El agente te pedirá una tarea.
-2.  Ejecutará la tarea en el navegador.
-3.  Al terminar, no se cerrará; te pedirá la siguiente tarea.
-4.  Para salir, simplemente escribe `salir` o `exit`.
+El agente funciona en un **bucle infinito**:
+1. Pide una tarea.
+2. Ejecuta la tarea en el navegador.
+3. Al terminar, no se cierra; pide la siguiente tarea.
+4. Para salir, escribe `salir` o `exit`.
 
-## ⚙️ configuración
+## Configuracion
 
 ### Claves API (.env)
-El comportamiento del agente depende de tus claves API configuradas en el archivo `.env`.
-Actualmente está configurado con un sistema de **Respaldo (Fallback)**:
+El comportamiento del agente depende de tus claves en `.env`. Esta configurado con **fallback**:
+1) **Primario:** Groq (modelo configurado en `.env`). Rapido y eficiente.
+2) **Secundario:** OpenRouter, usado si Groq falla.
+3) **Browser Use Cloud:** `BROWSER_USE_API_KEY` permite usar navegador en la nube (`use_cloud=True`) para menor latencia y sin depender de Chrome local.
 
-1.  **Principal (Primario):** Intenta usar **Groq** (Modelo Llama 3). Es muy rápido y eficiente.
-2.  **Respaldo (Secundario):** Si Groq falla o encuentra un error, cambia automáticamente a **OpenRouter** (Modelo Claude 3.5 Sonnet). Esto asegura que tus tareas se completen incluso si un proveedor tiene problemas.
+Puedes editar las claves en `.env`.
 
-Puedes editar estas claves abriendo el archivo `.env` en cualquier editor de texto.
-
-## 🛠️ Solución de Problemas
+## Solucion de Problemas
 
 ### "El navegador se abre y se cierra"
-Si el script termina inesperadamente, revisa el error en la terminal.
-*   **Error de Importación:** Asegúrate de estar ejecutando el python dentro del entorno virtual (`.\venv\Scripts\python`).
-*   **Error de API Key:** Verifica que las claves en `.env` sean correctas y tengan saldo/créditos.
+- Revisa la terminal.
+- **Importacion:** Ejecuta Python dentro del entorno virtual (`.\venv\Scripts\python`).
+- **API Key:** Verifica que las claves en `.env` sean correctas y tengan saldo/creditos.
 
 ### Reiniciar el entorno
-Si notas comportamientos extraños, a veces ayuda borrar las carpetas `__pycache__` o reinstalar las dependencias, pero por lo general reiniciar el script es suficiente.
+Si hay comportamientos extranos, borrar `__pycache__` o reinstalar dependencias puede ayudar. A menudo basta con reiniciar el script.
 
-## 📝 Ejemplo de Tareas
-Aquí hay algunas ideas de qué pedirle al agente:
-*   "Ve a amazon.com y busca precios de 'teclado mecánico', guarda los 3 primeros en un archivo."
-*   "Entra a wikipedia, busca 'Inteligencia Artificial' y resume el primer párrafo."
-*   "Busca vuelos baratos de Madrid a Londres para la próxima semana en Google Flights."
+## Ejemplo de Tareas
+- "Ve a amazon.com y busca precios de 'teclado mecanico', guarda los 3 primeros en un archivo."
+- "Entra a wikipedia, busca 'Inteligencia Artificial' y resume el primer parrafo."
+- "Busca vuelos baratos de Madrid a Londres para la proxima semana en Google Flights."
 
 ---
-**Nota:** El agente controla el navegador como un humano. Si le pides algo complejo, permítele tiempo para "pensar" y navegar paso a paso.
+**Nota:** El agente controla el navegador como un humano. En tareas complejas, dale tiempo para pensar y navegar.
+
+## Backlog / Tareas futuras
+- Disenar failover manual de multiples API keys por proveedor (Groq, OpenRouter):
+  - Guardar claves alternativas en `.env` (`GROQ_API_KEY_ALT_*`, `OPENROUTER_API_KEY_ALT_*`).
+  - Implementar rotacion en el cliente: ante 401/403/429 recrear el LLM con la siguiente clave disponible.
+  - Registrar metricas de fallos y clave activa para auditoria.
+  - Evitar rotacion circular infinita; detener tras agotar pool y reportar error estructurado.
