@@ -116,7 +116,13 @@ class OrchestratorEngine(AutomationEngine):
         prompt = self.build_plan_prompt(user_task, engines)
         log_line("Generando plan con LLM configurado (structured JSON)")
         llm = self.load_planner_llm()
-        completion = llm.complete_text(prompt, stop=None)
+        # Usamos el método estándar de llamada simple (invoke) y tomamos el contenido
+        completion_obj = llm.invoke(prompt)
+        # Algunos wrappers devuelven dict, otros ChatMessage; normalizamos a string
+        if hasattr(completion_obj, "content"):
+            completion = completion_obj.content
+        else:
+            completion = str(completion_obj)
         try:
             data = json.loads(completion)
             plan = EnginePlan(**data)
