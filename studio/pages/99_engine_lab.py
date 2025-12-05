@@ -12,7 +12,7 @@ st.title("Engine Lab (experimental)")
 def available_engines():
     engines = []
     engines.append(("Browser Use", BrowserUseEngine, BrowserUseEngine.is_available()))
-    engines.append(("Stagehand", StagehandEngine, StagehandEngine.is_available()))
+    engines.append(("Stagehand (Nativo - Node.js)", StagehandEngine, StagehandEngine.is_available()))
     engines.append(("Skyvern", SkyvernEngine, SkyvernEngine.is_available()))
     labels = []
     keys = []

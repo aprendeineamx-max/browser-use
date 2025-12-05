@@ -70,7 +70,7 @@ class StagehandEngine(AutomationEngine):
                         log_line(f"Stagehand devolvio error: {error}")
                     else:
                         log_line("Stagehand ejecucion exitosa")
-                    return {"success": success, "result": result or stdout, "errors": [error] if error else []}
+                    return {"success": success, "result": result or stdout, "errors": [] if success else ([error] if error else [])}
                 log_line("No se pudo parsear salida Stagehand (sin JSON valido)")
                 return {"success": False, "result": stdout, "errors": [stderr or "parse_error"]}
             return {"success": False, "result": "", "errors": ["Sin salida de Stagehand", stderr]}

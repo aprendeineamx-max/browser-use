@@ -28,6 +28,10 @@ UI principal:
 - **Script manager / Block builder**: diseña flujos y ahora genera scripts usando `BrowserUseEngine`.
 - **Engine lab**: selecciona motor (BrowserUse/Skyvern mock) y ejecuta tareas rápidas.
 
+### Requisito para motor Stagehand
+- Necesitas **Node.js** instalado (ej. v18+; detectamos v24 en este entorno).
+- El puente `studio/bridge_stagehand/` instala `@browserbasehq/stagehand`, `playwright`, `dotenv` y un `runner.js` que consume el motor desde Node.
+
 ## Generador basado en motores
 El Block Builder ya no instancia `Agent` directo: los scripts nuevos importan `BrowserUseEngine` para heredar resiliencia, logging y fallback.
 

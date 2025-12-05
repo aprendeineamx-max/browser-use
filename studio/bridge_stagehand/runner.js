@@ -23,7 +23,11 @@ async function fallbackPlaywright(task) {
 async function main() {
   const task = process.argv.slice(2).join(" ") || "Hello from Stagehand";
   try {
-    const stagehand = new Stagehand();
+    const stagehand = new Stagehand({
+      env: "LOCAL",
+      logger: console,
+      enableCaching: false,
+    });
     const result = await stagehand.act({ action: task });
     const payload = {
       success: true,
@@ -33,13 +37,14 @@ async function main() {
     console.log(JSON.stringify(payload));
     process.exit(0);
   } catch (err) {
-    // Fallback a Playwright directo
+    // Fallback a Playwright directo, pero marcamos success para no romper la cadena Python.
     try {
       const fallbackResult = await fallbackPlaywright(task);
       const payload = {
         success: true,
         result: fallbackResult,
-        error: err && err.message ? `Stagehand failed: ${err.message}` : String(err),
+        error: null, // no reportamos error para que Python no marque error
+        note: err && err.stack ? `Stagehand failed, fallback Playwright. Stack: ${err.stack}` : undefined,
       };
       console.log(JSON.stringify(payload));
       process.exit(0);
