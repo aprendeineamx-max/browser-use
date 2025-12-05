@@ -19,6 +19,8 @@ from browser_use.llm.google.chat import ChatGoogle
 from studio.utils.planner_settings import load_config
 
 LOG_FILE = Path("Registro_de_logs.txt")
+MAX_RETRIES = 3
+RETRY_SLEEP = 2  # seconds
 
 
 def log_line(message: str) -> None:
@@ -151,16 +153,26 @@ class OrchestratorEngine(AutomationEngine):
                 placeholder = f"{{{key}}}"
                 if placeholder in updated_task:
                     updated_task = updated_task.replace(placeholder, str(val))
-            log_line(f"Ejecutando paso con {step.engine}: {updated_task}")
-            res = await eng.execute_task(updated_task, context)
+            attempt_result = None
+            for i in range(MAX_RETRIES):
+                log_line(f"Ejecutando paso con {step.engine} (intento {i+1}/{MAX_RETRIES}): {updated_task}")
+                res = await eng.execute_task(updated_task, context)
+                if res.get("success"):
+                    attempt_result = res
+                    break
+                else:
+                    log_line(f"Intento {i+1} fallido en {step.engine}: {res.get('errors')}")
+                    if i < MAX_RETRIES - 1:
+                        await asyncio.sleep(RETRY_SLEEP)
             await eng.stop()
-            if res.get("success"):
-                global_ctx[step.context_key] = res.get("result")
+            if attempt_result:
+                global_ctx[step.context_key] = attempt_result.get("result")
+                results.append({"engine": step.engine, "result": attempt_result})
             else:
-                log_line(f"Paso fallido en {step.engine}: {res.get('errors')}")
+                # stop-on-fail after retries
                 results.append({"engine": step.engine, "result": res})
+                log_line(f"Paso fallido definitivo en {step.engine}: {res.get('errors')}")
                 return {"success": False, "result": res, "errors": res.get("errors"), "plan": plan.dict(), "trace": results}
-            results.append({"engine": step.engine, "result": res})
 
         final_result = results[-1]["result"] if results else {}
         return {"success": True, "result": final_result, "errors": [], "plan": plan.dict(), "trace": results}
