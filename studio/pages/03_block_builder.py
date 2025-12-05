@@ -209,11 +209,13 @@ st.session_state.provider_cfg = provider_cfg
 from studio.engines.browser_use_engine import BrowserUseEngine
 from studio.engines.stagehand_engine import StagehandEngine
 from studio.engines.skyvern_engine import SkyvernEngine
+from studio.engines.lavague_engine import LaVagueEngine
 
 engine_defs = [
     ("browser_use", "Browser Use", BrowserUseEngine, BrowserUseEngine.is_available()),
-    ("stagehand", "Stagehand", StagehandEngine, StagehandEngine.is_available()),
-    ("skyvern", "Skyvern", SkyvernEngine, SkyvernEngine.is_available()),
+    ("stagehand", "Stagehand (Nativo - Node.js)", StagehandEngine, StagehandEngine.is_available()),
+    ("skyvern", "Skyvern (Standby - Docker)", SkyvernEngine, SkyvernEngine.is_available()),
+    ("lavague", "LaVague (Python)", LaVagueEngine, LaVagueEngine.is_available()),
 ]
 engine_labels = []
 engine_keys = []
