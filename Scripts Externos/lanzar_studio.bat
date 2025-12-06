@@ -1,69 +1,30 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
+cd /d "%~dp0\.."
 
-TITLE Browser Use Studio Launcher (Safe)
+echo ==================================================
+echo   PROTOCOLO DE LIMPIEZA Y LANZAMIENTO (V3)
+echo ==================================================
 
-rem Guardar ruta del script y movernos a la raiz del proyecto
-set "SCRIPT_DIR=%~dp0"
-cd /d "%SCRIPT_DIR%.."
-echo Directorio de trabajo: %cd%
-
-echo =============================================
-echo   LIMPIEZA DE PUERTOS Y PROCESOS...
-echo =============================================
-
-rem 1) Matar proceso especifico en el puerto 8501 (salida silenciosa)
+echo [1/4] Buscando procesos en puerto 8501...
 for /f "tokens=5" %%a in ('netstat -aon ^| find ":8501" ^| find "LISTENING"') do (
+    echo     - Matando PID: %%a
     taskkill /F /PID %%a >NUL 2>&1
 )
 
-rem 2) Matar ventanas de Streamlit fantasmas (salida silenciosa)
+echo [2/4] Limpiando procesos de Streamlit huerfanos...
+taskkill /F /IM "streamlit.exe" >NUL 2>&1
 taskkill /F /FI "WINDOWTITLE eq Streamlit*" /IM python.exe >NUL 2>&1
 
-rem 3) Espera obligatoria para liberar sockets
-echo Esperando liberacion de sockets...
+echo [3/4] Esperando liberacion de sockets (3s)...
 timeout /t 3 /nobreak >NUL
 
-echo =============================================
-echo   VERIFICANDO ENTORNO...
-echo =============================================
+echo [4/4] Iniciando Browser Use Studio...
+call .venv\Scripts\activate
+start "Browser Use Studio" /MAX streamlit run studio/app.py --server.port 8501
 
-if not exist ".venv\Scripts\activate.bat" (
-    echo ERROR CRITICO: No encuentro el entorno virtual (.venv\Scripts\activate.bat)
-    goto error
-)
-
-if not exist "studio\app.py" (
-    echo ERROR CRITICO: No encuentro studio\app.py
-    goto error
-)
-
-echo Activando entorno virtual...
-call ".venv\Scripts\activate.bat"
-if errorlevel 1 (
-    echo ERROR: Fallo al activar el entorno virtual.
-    goto error
-)
-
-echo =============================================
-echo   INICIANDO BROWSER USE STUDIO...
-echo =============================================
 echo.
-
-streamlit run studio/app.py --server.port 8501
-if errorlevel 1 (
-    echo ERROR: Streamlit finalizo con codigo !errorlevel!
-    goto error
-)
-goto end
-
-:error
+echo    [EXITO] La aplicacion se ha lanzado en una nueva ventana.
+echo    Puedes cerrar esta consola.
 echo.
-echo Presiona una tecla para cerrar...
-pause >NUL
-goto :eof
-
-:end
-echo.
-echo Ejecucion finalizada. Cierra esta ventana si deseas.
-pause >NUL
+pause
