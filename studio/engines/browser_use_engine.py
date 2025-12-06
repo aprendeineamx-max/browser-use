@@ -150,16 +150,14 @@ class BrowserUseEngine(AutomationEngine):
 
             success = bool(history.is_successful()) if hasattr(history, "is_successful") else False
 
-            if success:
-                log_line("[Success] Ejecucion primaria completada")
-                try:
-                    result_text = history.last_result[-1].extracted_content  # type: ignore
-                except Exception:
-                    result_text = ""
-                # Si el agente fue exitoso pero no devolvio texto, intentar fallback suave
-                if not result_text:
-                    log_line("[Warn] Ejecucion sin texto extraido; intentando fallback suave")
-                    return await self._fallback_plain(task, context)
+            # Intentar extraer texto aunque success sea False
+            try:
+                result_text = history.last_result[-1].extracted_content  # type: ignore
+            except Exception:
+                result_text = ""
+
+            if success or result_text:
+                log_line("[Success] Ejecucion primaria completada (con o sin flag de success)")
                 return {"success": True, "result": result_text, "errors": []}
 
             # history existe pero no hay datos estructurados -> fallback directo

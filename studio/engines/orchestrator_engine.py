@@ -135,7 +135,12 @@ class OrchestratorEngine(AutomationEngine):
             return plan
         except (json.JSONDecodeError, ValidationError) as exc:
             log_line(f"Error parseando plan: {exc}; se usa plan simple")
-            fallback_engine = "BrowserUseEngine" if "BrowserUseEngine" in engines else next(iter(engines.keys()))
+            if "StagehandEngine" in engines:
+                fallback_engine = "StagehandEngine"
+            elif "BrowserUseEngine" in engines:
+                fallback_engine = "BrowserUseEngine"
+            else:
+                fallback_engine = next(iter(engines.keys()))
             return EnginePlan(plan=[EngineStep(engine=fallback_engine, task=user_task, context_key="final")])
 
     async def execute_task(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
