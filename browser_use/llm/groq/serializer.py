@@ -1,5 +1,7 @@
 from typing import overload
 
+from langchain_core.messages import HumanMessage
+
 from groq.types.chat import (
 	ChatCompletionAssistantMessageParam,
 	ChatCompletionContentPartImageParam,
@@ -121,6 +123,14 @@ class GroqMessageSerializer:
 			if message.name is not None:
 				user_result['name'] = message.name
 			return user_result
+
+		# Permitir mensajes nativos de LangChain (HumanMessage) como "user"
+		if isinstance(message, HumanMessage):
+			content = message.content if isinstance(message.content, str) else str(message.content)
+			return {
+				'role': 'user',
+				'content': content,
+			}
 
 		elif isinstance(message, SystemMessage):
 			system_result: ChatCompletionSystemMessageParam = {
