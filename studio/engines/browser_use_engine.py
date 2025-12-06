@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 from browser_use import Agent, Browser
 from browser_use.llm import ChatGroq
+from dotenv import load_dotenv
 
 from .base_engine import AutomationEngine
 from studio.utils.sentinel import ensure_config, check_vital_signs
@@ -47,6 +48,7 @@ class BrowserUseEngine(AutomationEngine):
         self.use_vision = use_vision
         self.keep_alive = keep_alive
         self.browser: Optional[Browser] = None
+        load_dotenv()
 
     async def start(self) -> None:
         self.browser = Browser(

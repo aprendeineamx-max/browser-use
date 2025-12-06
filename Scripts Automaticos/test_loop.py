@@ -1,6 +1,8 @@
 import asyncio
 import pandas as pd
+from pathlib import Path
 from studio.engines.browser_use_engine import BrowserUseEngine
+from studio.utils.logger import log_event
 
 
 async def run_once(task_text: str, engine, initial_actions):
@@ -8,14 +10,13 @@ async def run_once(task_text: str, engine, initial_actions):
 
 
 async def main():
-    engine = BrowserUseEngine(headless=False, use_vision=False)
+    engine = BrowserUseEngine(headless=True, use_vision=False)
 
-    items = pd.read_csv(r"..\\test_data.csv")
+    csv_path = Path(__file__).resolve().parent.parent / "test_data.csv"
+    items = pd.read_csv(csv_path)
 
     initial_actions = [
-        {'navigate': {'url': f'https://google.com/search?q={{row["busqueda"]}}', 'new_tab': False}},
-        {'type': {'selector': 'input[name=q]', 'text': f"{{row['busqueda']}}", 'by': 'css'}},
-        {'scroll': {'delta_y': 400, 'delta_x': 0, 'smart': True}},
+        {'navigate': {'url': "https://google.com", 'new_tab': False}},
     ]
 
     retry_count = 0
@@ -33,17 +34,19 @@ async def main():
             index, row = maybe_row
         else:
             index, row = maybe_index, maybe_row
-        print(f"Procesando fila {index}")
-        task_text = f"Navega y busca: {row['busqueda']}\nDato: {row}"
+        log_event("TestLoop", f"Procesando fila {index} -> {row}")
+        task_text = f"Navega y busca: {row['busqueda']}"
         attempts = 0
         while True:
             try:
                 result = await run_once(task_text, engine, initial_actions)
+                log_event("TestLoop", f"Resultado fila {index}: {result}")
                 if isinstance(result, dict) and not result.get("success", True):
                     raise RuntimeError(result.get("errors") or "Ejecucion no exitosa")
                 print("Resultado:", result)
                 break
             except Exception as exc:
+                log_event("TestLoop", f"Error fila {index}: {exc}")
                 attempts += 1
                 if attempts > retry_count:
                     print(f"Error definitivo tras reintentos: {exc}")

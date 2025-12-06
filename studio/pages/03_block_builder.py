@@ -364,7 +364,7 @@ def interpolate(text: str) -> str:
     return out
 
 
-def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], engine_key: str) -> str:
+def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], engine_key: str, engine_cfg: Dict[str, Any] | None = None) -> str:
     task_text = build_task_text(blocks)
     data_loader = render_data_loader(data_cfg)
     actions, retry_cfg = split_actions(blocks)
@@ -394,12 +394,23 @@ def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], engi
         engine_import = "from studio.engines.snowflake_engine import SnowflakeEngine"
         engine_ctor = "SnowflakeEngine()"
 
+    engine_cfg = engine_cfg or {}
+    model_override = engine_cfg.get("model") or ""
+    provider_override = engine_cfg.get("provider") or ""
+    api_key_override = engine_cfg.get("api_key") or ""
+    if model_override:
+        engine_ctor = f"BrowserUseEngine(model='{model_override}', headless=False, use_vision=False)"
+    config_comment = f\"\"\"# Configuracion inyectada: provider={provider_override} model={model_override} key={'set' if api_key_override else 'env'}\"\"\"
+
     needs_pandas = data_cfg.get("source") in ("csv", "excel")
     pandas_import = "import pandas as pd\n" if needs_pandas else ""
 
     script = f"""import asyncio
 {pandas_import}import json
 {engine_import}
+
+{config_comment}
+API_KEY = \"{api_key_override}\"  # si esta vacio, usa env
 
 
 async def run_once(task_text: str, engine, initial_actions):
@@ -464,7 +475,12 @@ if st.button("Previsualizar script"):
     if not st.session_state.blocks:
         st.warning("Agrega al menos un bloque.")
     else:
-        script_preview = generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.engine_choice)
+        engine_cfg = {
+            "provider": st.session_state.get("session_provider", ""),
+            "model": st.session_state.get("session_model", ""),
+            "api_key": st.session_state.get("session_api_key", ""),
+        }
+        script_preview = generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.engine_choice, engine_cfg=engine_cfg)
         st.code(script_preview, language="python")
         log_event("BlockBuilder", f"Previsualizacion generada para {len(st.session_state.blocks)} bloques")
 
@@ -475,7 +491,12 @@ if st.button("Guardar en Scripts Automaticos/"):
         st.error("Agrega al menos un bloque.")
     else:
         target = SCRIPTS_DIR / file_name
-        script_content = generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.engine_choice)
+        engine_cfg = {
+            "provider": st.session_state.get("session_provider", ""),
+            "model": st.session_state.get("session_model", ""),
+            "api_key": st.session_state.get("session_api_key", ""),
+        }
+        script_content = generate_script(st.session_state.blocks, st.session_state.data_cfg, st.session_state.engine_choice, engine_cfg=engine_cfg)
         target.write_text(script_content, encoding="utf-8")
         log_success("BlockBuilder", f"Script generado y guardado: {target}")
         st.success(f"Guardado en {target}")

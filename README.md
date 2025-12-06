@@ -44,3 +44,10 @@ El builder soporta datos externos (CSV/Excel/JSON) e interpolación. Los scripts
 
 ## Futuro
 Extender la arquitectura multi‑motor (Skyvern, Stagehand, LaVague) siguiendo `docs/ARCHITECTURE_FUTURE.md`.
+
+## Guia de Automatizacion con Datos (CSV/Excel)
+1. Ve a la pagina **Block Builder**.
+2. En 'Datos externos', carga un CSV/Excel/JSON y define la columna/campo a usar. El builder lee solo las primeras 5 filas y limita archivos a 5MB.
+3. Usa \ en los textos de los bloques para interpolar valores por fila.
+4. Genera el script: se escribe un bucle for que itera sobre el DataFrame/JSON, imprime el indice y ejecuta las acciones con retries.
+5. El script resultante queda en Scripts Automaticos/ y puede ejecutarse con python tu_script.py (requiere dependencias y credenciales del motor elegido).
