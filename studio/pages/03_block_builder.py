@@ -168,24 +168,39 @@ if data_cfg["source"] != "none":
 
     # Indicador visual de datos cargados
     rows_detected = None
+    preview = None
     if data_cfg["path"]:
         try:
             path_obj = Path(data_cfg["path"])
-            if path_obj.exists():
+            if not path_obj.exists():
+                st.error("El archivo no existe.")
+            elif path_obj.stat().st_size > 5 * 1024 * 1024:
+                st.error("El archivo supera 5MB. Usa un archivo más pequeño.")
+            else:
                 if data_cfg["source"] == "csv":
                     import pandas as pd
+                    df = pd.read_csv(path_obj, nrows=5)
+                    preview = df
                     rows_detected = len(pd.read_csv(path_obj))
                 elif data_cfg["source"] == "excel":
                     import pandas as pd
+                    df = pd.read_excel(path_obj, nrows=5)
+                    preview = df
                     rows_detected = len(pd.read_excel(path_obj))
                 elif data_cfg["source"] == "json":
                     import json
                     with path_obj.open("r", encoding="utf-8") as f:
-                        rows_detected = len(json.load(f))
-        except Exception:
+                        data_json = json.load(f)
+                    rows_detected = len(data_json)
+                    preview = data_json[:5] if isinstance(data_json, list) else None
+        except Exception as exc:
+            st.error(f"No se pudo cargar el archivo: {exc}")
+            log_error("BlockBuilder", f"Error leyendo datos externos: {exc}")
             rows_detected = None
     if rows_detected is not None:
-        st.info(f"Modo de Datos Activo: {rows_detected} filas detectadas")
+        st.info(f"Modo de Datos Activo: {rows_detected} filas detectadas (vista previa de 5 filas abajo)")
+        if preview is not None:
+            st.write(preview)
 st.session_state.data_cfg = data_cfg
 
 # -------------------------
@@ -294,26 +309,75 @@ def split_actions(blocks: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], D
     return actions, retry_cfg
 
 
-def format_actions(actions: List[Dict[str, Any]]) -> str:
+def format_actions(actions: List[Dict[str, Any]], row_var: str, use_row: bool) -> str:
     if not actions:
         return "    # sin acciones predefinidas\n"
     lines = []
     for act in actions:
-        lines.append(f"        {act},")
+        # sustitucion basica en strings
+        normalized: Dict[str, Any] = {}
+        for k, v in act.items():
+            if isinstance(v, dict):
+                sub = {}
+                for sk, sv in v.items():
+                    if isinstance(sv, str) and use_row:
+                        interp = interpolate(sv)
+                        if interp != sv:
+                            sub[sk] = f"f\"{interp}\""
+                        else:
+                            sub[sk] = repr(sv)
+                    else:
+                        sub[sk] = sv
+                normalized[k] = sub
+            else:
+                normalized[k] = v
+        # construir linea
+        rendered_parts = []
+        for key, val in normalized.items():
+            if isinstance(val, dict):
+                inner_parts = []
+                for ik, iv in val.items():
+                    if isinstance(iv, str) and iv.startswith("f\""):
+                        inner_parts.append(f"'{ik}': {iv}")
+                    else:
+                        inner_parts.append(f"'{ik}': {iv}")
+                inner = ", ".join(inner_parts)
+                rendered_parts.append(f"'{key}': {{{inner}}}")
+            else:
+                rendered_parts.append(f"'{key}': {val!r}")
+        lines.append(f"        {{{', '.join(rendered_parts)}}},")
     return "\n".join(lines)
+
+
+def interpolate(text: str) -> str:
+    """Reemplaza ${campo} por {row['campo']} para usar en f-strings."""
+    if "${" not in text:
+        return text
+    out = text
+    matches = []
+    import re
+
+    for m in re.finditer(r"\$\{([^}]+)\}", text):
+        matches.append(m.group(1))
+    for field in matches:
+        out = out.replace("${" + field + "}", "{row['" + field + "']}")
+    return out
 
 
 def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], engine_key: str) -> str:
     task_text = build_task_text(blocks)
     data_loader = render_data_loader(data_cfg)
     actions, retry_cfg = split_actions(blocks)
-    actions_block = format_actions(actions)
+    use_row = data_cfg.get("source") != "none"
+    actions_block = format_actions(actions, row_var="row", use_row=use_row)
 
     var_name = data_cfg.get("var_name") or "item"
+    interpolated_task = interpolate(task_text)
     if data_cfg["source"] == "none":
-        task_expr = f"'''{task_text}'''"
+        task_expr = f"'''{interpolated_task}'''"
     else:
-        task_expr = f"f'''{task_text}\\nDato: {{{var_name}}}'''"
+        prefix = "f"
+        task_expr = f"{prefix}'''{interpolated_task}\\nDato: {{{var_name}}}'''"
 
     engine_import = "from studio.engines.browser_use_engine import BrowserUseEngine"
     engine_ctor = "BrowserUseEngine(headless=False, use_vision=False)"
@@ -330,7 +394,11 @@ def generate_script(blocks: List[Dict[str, Any]], data_cfg: Dict[str, Any], engi
         engine_import = "from studio.engines.snowflake_engine import SnowflakeEngine"
         engine_ctor = "SnowflakeEngine()"
 
+    needs_pandas = data_cfg.get("source") in ("csv", "excel")
+    pandas_import = "import pandas as pd\n" if needs_pandas else ""
+
     script = f"""import asyncio
+{pandas_import}import json
 {engine_import}
 
 
@@ -350,8 +418,21 @@ async def main():
     retry_count = {retry_cfg.get("retries", 0)}
     retry_wait = {retry_cfg.get("wait_seconds", 0)}
 
-    for {var_name} in items:
-        task_text = {task_expr}
+    # Ejecutar las acciones base para cada fila de datos
+    if isinstance(items, list):
+        iterable = items
+    elif hasattr(items, "iterrows"):
+        iterable = items.iterrows()
+    else:
+        iterable = [items]
+
+    for maybe_index, maybe_row in enumerate(iterable):
+        if isinstance(maybe_row, tuple) and len(maybe_row) == 2:
+            index, row = maybe_row
+        else:
+            index, row = maybe_index, maybe_row
+        print(f"Procesando fila {{index}}")
+        task_text = {task_expr}.replace("${{index}}", str(index))
         attempts = 0
         while True:
             try:
