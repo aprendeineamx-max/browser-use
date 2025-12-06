@@ -145,19 +145,27 @@ class BrowserUseEngine(AutomationEngine):
             )
             if history is None:
                 log_line("[Warn] Agente finalizo sin history (posible timeout/token)")
-                return {"success": False, "result": "", "errors": ["Agente sin datos (None)"]}
+                return await self._fallback_plain(task, context)
+
             success = bool(history.is_successful()) if hasattr(history, "is_successful") else False
+
             if success:
                 log_line("[Success] Ejecucion primaria completada")
                 try:
                     result_text = history.last_result[-1].extracted_content  # type: ignore
                 except Exception:
                     result_text = ""
+                # Si el agente fue exitoso pero no devolvio texto, intentar fallback suave
+                if not result_text:
+                    log_line("[Warn] Ejecucion sin texto extraido; intentando fallback suave")
+                    return await self._fallback_plain(task, context)
                 return {"success": True, "result": result_text, "errors": []}
-            # history existe pero no hay datos
+
+            # history existe pero no hay datos estructurados -> fallback directo
             if not getattr(history, "last_result", None):
-                log_line("[Warn] Agente finalizo sin datos estructurados (posible agotamiento de tokens)")
-                return {"success": False, "result": "", "errors": ["Agente sin datos estructurados"]}
+                log_line("[Warn] Agente finalizo sin datos estructurados (posible agotamiento de tokens) -> fallback")
+                return await self._fallback_plain(task, context)
+
             # Si no hubo exito, forzamos fallback aunque no haya exception Python
             log_line(f"[Fallback] Forzado por success={history.is_successful()}")
             return await self._fallback_plain(task, context)
