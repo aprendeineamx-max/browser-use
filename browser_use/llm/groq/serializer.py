@@ -1,7 +1,5 @@
 from typing import overload
 
-from langchain_core.messages import HumanMessage
-
 from groq.types.chat import (
 	ChatCompletionAssistantMessageParam,
 	ChatCompletionContentPartImageParam,
@@ -13,6 +11,7 @@ from groq.types.chat import (
 )
 from groq.types.chat.chat_completion_content_part_image_param import ImageURL
 from groq.types.chat.chat_completion_message_tool_call_param import Function
+from langchain_core.messages import HumanMessage
 
 from browser_use.llm.messages import (
 	AssistantMessage,
@@ -124,7 +123,6 @@ class GroqMessageSerializer:
 				user_result['name'] = message.name
 			return user_result
 
-		# Permitir mensajes nativos de LangChain (HumanMessage) como "user"
 		if isinstance(message, HumanMessage):
 			content = message.content if isinstance(message.content, str) else str(message.content)
 			return {
