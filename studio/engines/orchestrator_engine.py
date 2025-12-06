@@ -93,16 +93,18 @@ class OrchestratorEngine(AutomationEngine):
         if "LaVagueEngine" in engines:
             desc.append("LaVagueEngine: razonamiento Python con LaVague (soft).")
         available_text = "\n".join(f"- {d}" for d in desc)
+        example_json = '{"plan": [{"engine": "StagehandEngine", "task": "Search price", "context_key": "price"}]}'
         return (
             "Eres un planificador. Devuelve solo JSON con la clave 'plan' que es una lista de pasos.\n"
             "Cada paso tiene: engine (BrowserUseEngine, StagehandEngine, SnowflakeEngine, LaVagueEngine), "
             "task (texto), context_key (identificador para almacenar resultado).\n"
             "Motores disponibles:\n"
             f"{available_text}\n"
+            f"Ejemplo estricto de salida JSON: {example_json}\n"
             "Reglas:\n"
             "- Usa el menor número de pasos posible.\n"
             "- Usa context_key para encadenar resultados.\n"
-            "- Responde SOLO JSON válido.\n"
+            "- RESPOND ONLY WITH VALID JSON. NO MARKDOWN. NO COMMENTS.\n"
             f"Tarea del usuario: {user_task}"
         )
 
