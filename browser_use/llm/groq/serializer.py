@@ -11,7 +11,7 @@ from groq.types.chat import (
 )
 from groq.types.chat.chat_completion_content_part_image_param import ImageURL
 from groq.types.chat.chat_completion_message_tool_call_param import Function
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import BaseMessage as LCHumanBaseMessage, HumanMessage
 
 from browser_use.llm.messages import (
 	AssistantMessage,
@@ -114,6 +114,15 @@ class GroqMessageSerializer:
 	def serialize(message: BaseMessage) -> ChatCompletionMessageParam:
 		"""Serialize a custom message to an OpenAI message param."""
 
+		# Manejo defensivo para mensajes nativos de LangChain (HumanMessage)
+		# Algunas versiones cargan tipos dinámicamente; validamos por instancia y por nombre de clase.
+		if isinstance(message, HumanMessage) or isinstance(message, LCHumanBaseMessage) or message.__class__.__name__ == 'HumanMessage':
+			content = message.content if isinstance(message.content, str) else str(message.content)
+			return {
+				'role': 'user',
+				'content': content,
+			}
+
 		if isinstance(message, UserMessage):
 			user_result: ChatCompletionUserMessageParam = {
 				'role': 'user',
@@ -122,13 +131,6 @@ class GroqMessageSerializer:
 			if message.name is not None:
 				user_result['name'] = message.name
 			return user_result
-
-		if isinstance(message, HumanMessage):
-			content = message.content if isinstance(message.content, str) else str(message.content)
-			return {
-				'role': 'user',
-				'content': content,
-			}
 
 		elif isinstance(message, SystemMessage):
 			system_result: ChatCompletionSystemMessageParam = {
