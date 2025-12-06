@@ -38,6 +38,13 @@ def label_cost(model: str) -> str:
 
 def fetch_models(provider: str, api_key: str) -> List[str]:
     models: List[str] = []
+    blacklist = {
+        "embedding-gecko-001",
+        "gemini-2.0-flash-exp",
+        "gemini-2.0-pro-exp",
+        "gemma-3-4b-it",
+        "gemma-3-7b-it",
+    }
     try:
         if provider == "groq":
             url = "https://api.groq.com/openai/v1/models"
@@ -62,6 +69,7 @@ def fetch_models(provider: str, api_key: str) -> List[str]:
                 raw = [m.get("name", "") for m in data.get("models", [])]
                 # names come as "models/gemini-1.5-flash-002"
                 models = [name.split("/")[-1] for name in raw if name]
+                models = [m for m in models if m not in blacklist]
             else:
                 log_error("KeyTester", f"Gemini models fallo HTTP {resp.status_code}: {resp.text}")
     except Exception as exc:

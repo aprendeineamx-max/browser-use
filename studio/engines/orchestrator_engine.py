@@ -17,6 +17,7 @@ from studio.utils.sentinel import ensure_config, check_vital_signs
 from browser_use.llm import ChatGroq, ChatOpenRouter
 from browser_use.llm.google.chat import ChatGoogle
 from studio.utils.planner_settings import load_config
+from langchain_core.messages import HumanMessage
 
 LOG_FILE = Path("Registro_de_logs.txt")
 MAX_RETRIES = 3
@@ -116,7 +117,8 @@ class OrchestratorEngine(AutomationEngine):
         prompt = self.build_plan_prompt(user_task, engines)
         log_line("Generando plan con LLM configurado (structured JSON)")
         llm = self.load_planner_llm()
-        completion_obj = await llm.ainvoke(prompt)
+        # Enviamos como lista de mensajes para evitar errores de serializacion
+        completion_obj = await llm.ainvoke([HumanMessage(content=prompt)])
         completion = completion_obj.content if hasattr(completion_obj, "content") else str(completion_obj)
         try:
             data = json.loads(completion)
