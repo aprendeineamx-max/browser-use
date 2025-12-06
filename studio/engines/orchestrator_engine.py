@@ -79,9 +79,15 @@ class OrchestratorEngine(AutomationEngine):
     def build_plan_prompt(self, user_task: str, engines: Dict[str, Any]) -> str:
         desc = []
         if "StagehandEngine" in engines:
-            desc.append("StagehandEngine: MOTOR PRINCIPAL para navegación, extraccion de datos y acciones rapidas. (Usar para el primer paso).")
+            desc.append(
+                "StagehandEngine: MOTOR DE NAVEGACION Y EXTRACCION DE DATOS PRINCIPAL. "
+                "USAR SIEMPRE para cualquier busqueda web y extraccion. Ideal para el primer paso."
+            )
         if "BrowserUseEngine" in engines:
-            desc.append("BrowserUseEngine: Usar solo para tareas de agentes visuales complejos o si Stagehand falla.")
+            desc.append(
+                "BrowserUseEngine: Motor legacy para tareas visuales muy complejas o cuando Stagehand no pueda. "
+                "EVITAR en extracciones simples o busquedas web."
+            )
         if "SnowflakeEngine" in engines:
             desc.append("SnowflakeEngine: consultas SQL y snowflake.cortex.complete.")
         if "LaVagueEngine" in engines:
