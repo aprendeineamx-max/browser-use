@@ -1,4 +1,21 @@
+import os
 import asyncio
+import sys
+from pathlib import Path
+
+# Forzar UTF-8 en consola Windows para evitar errores de logging con emojis
+os.environ["PYTHONIOENCODING"] = "utf-8"
+os.environ["PYTHONLEGACYWINDOWSIOENCODING"] = "utf-8"
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
+# Asegurar que la raiz del repo este en sys.path
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from studio.engines.orchestrator_engine import OrchestratorEngine
 

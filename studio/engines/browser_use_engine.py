@@ -38,6 +38,7 @@ class BrowserUseEngine(AutomationEngine):
 
     def __init__(
         self,
+        # Modelo soportado para JSON schema en Groq
         model: str = "meta-llama/llama-4-maverick-17b-128e-instruct",
         headless: bool = False,
         use_vision: bool = False,
